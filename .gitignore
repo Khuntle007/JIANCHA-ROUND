@@ -1,0 +1,6 @@
+# local Claude/project tooling
+.claude/
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store
