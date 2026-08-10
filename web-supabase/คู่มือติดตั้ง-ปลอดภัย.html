@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JIANCHA · คู่มือติดตั้งแบบปลอดภัย (ใช้ภายในองค์กร)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+:root{--ink:#181818;--gold:#AD9C82;--stone:#545351;--cream:#E0DDD3;--bg:#F3F1EB;--bd:rgba(84,83,81,.18)}
+*{box-sizing:border-box}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--ink);margin:0;line-height:1.6}
+.wrap{max-width:840px;margin:0 auto;padding:2rem 1.2rem 4rem}
+.k{color:var(--gold);font-family:'Archivo';font-size:.7rem;letter-spacing:.2em;text-transform:uppercase}
+h1{font-family:'Archivo';letter-spacing:.03em;font-size:1.6rem;margin:.2rem 0 0}
+h2{font-family:'Archivo';font-size:1rem;letter-spacing:.02em;margin:0}
+.part{font-family:'Archivo';letter-spacing:.06em;text-transform:uppercase;font-size:.8rem;color:var(--gold);margin:1.8rem 0 .6rem;border-bottom:1px solid var(--bd);padding-bottom:.3rem}
+.hero{background:var(--ink);color:#fff;border-radius:2px;padding:1.6rem;margin-bottom:.6rem;border-top:4px solid var(--gold)}
+.hero .k{color:var(--gold)}
+.step{background:#fff;border:1px solid var(--bd);border-radius:2px;padding:1.1rem 1.2rem;margin-bottom:.8rem;display:flex;gap:1rem}
+.num{flex:none;width:32px;height:32px;border-radius:50%;background:var(--gold);color:var(--ink);font-family:'Archivo';font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.9rem}
+.step .body{flex:1}
+code,.mono{font-family:ui-monospace,Consolas,monospace;background:#f4f2ec;border:1px solid var(--bd);border-radius:3px;padding:.1em .4em;font-size:.9em;word-break:break-all}
+.note{background:#FBF3D9;border:1px solid #E7D9A0;border-radius:2px;padding:.6rem .8rem;font-size:.88rem;margin-top:.5rem}
+.sec{background:#E4F1E8;border:1px solid #A9D3B6;border-radius:2px;padding:.6rem .8rem;font-size:.88rem;margin-top:.5rem}
+a{color:#8a7b60}
+ul{margin:.4rem 0 0;padding-left:1.2rem}
+.layers{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:.6rem 0}
+.layer{background:#fff;border:1px solid var(--bd);border-radius:2px;padding:.7rem;font-size:.82rem}
+.layer b{display:block;font-family:'Archivo';font-size:.72rem;letter-spacing:.04em;color:var(--gold)}
+@media(max-width:640px){.layers{grid-template-columns:1fr}}
+</style></head><body>
+<div class="wrap">
+<div class="hero">
+  <div class="k">JIANCHA · Rounds System</div>
+  <h1>ติดตั้งแบบปลอดภัย (ใช้ภายในองค์กร)</h1>
+  <p style="margin:.6rem 0 0">ข้อมูลรวมศูนย์ · เปิดได้เฉพาะพนักงาน · ไม่รั่วออกนอก</p>
+</div>
+<div class="layers">
+  <div class="layer"><b>ชั้น 1 · เข้าเว็บ</b>Cloudflare Access — เฉพาะอีเมล @jianchatea.com</div>
+  <div class="layer"><b>ชั้น 2 · เข้าระบบ</b>รหัสผ่านองค์กร (ตรวจฝั่งเซิร์ฟเวอร์)</div>
+  <div class="layer"><b>ชั้น 3 · ซอร์สโค้ด</b>repo private + ไม่มี endpoint สาธารณะ</div>
+</div>
+
+<div class="part">Part 1 · ฐานข้อมูล (Supabase)</div>
+<div class="step"><div class="num">1</div><div class="body"><h2>สมัคร + สร้างโปรเจกต์</h2>
+  <ul><li><b>supabase.com</b> → Start your project → New project</li>
+  <li>ตั้งชื่อ · ตั้ง Database Password (จดไว้) · Region <b>Singapore</b> → Create (รอ ~2 นาที)</li></ul></div></div>
+<div class="step"><div class="num">2</div><div class="body"><h2>รันสคริปต์ฐานข้อมูล</h2>
+  <ul><li>SQL Editor → New query → วางเนื้อ <code>supabase-setup.sql</code></li>
+  <li>🔑 เปลี่ยน <span class="mono">'JIANCHA-CHANGE-ME'</span> เป็น<b>รหัสผ่านองค์กร</b>ที่ต้องการ → Run</li></ul></div></div>
+<div class="step"><div class="num">3</div><div class="body"><h2>คัดลอกค่า 2 ค่า</h2>
+  <ul><li>Project Settings → API → คัดลอก <b>Project URL</b> และ <b>anon public</b> key</li></ul>
+  <div class="sec">ปลอดภัย: anon key เปิดข้อมูลไม่ได้ถ้าไม่มีรหัสผ่านองค์กร (ทุก endpoint บังคับรหัส)</div></div></div>
+
+<div class="part">Part 2 · ใส่ค่าในแอป + ขึ้น GitHub</div>
+<div class="step"><div class="num">4</div><div class="body"><h2>ใส่ค่าในไฟล์</h2>
+  <ul><li>เปิด <code>web-supabase/index.html</code> ด้วย Notepad → แทนค่า 2 บรรทัดบนสุด:</li></ul>
+  <p class="mono" style="display:block;padding:.5rem;white-space:pre-wrap">const SUPA_URL = 'https://YOUR-PROJECT.supabase.co';
+const SUPA_KEY = 'YOUR-ANON-PUBLIC-KEY';</p>
+  <ul><li>Save → เปิด GitHub Desktop → กด <b>Push origin</b></li></ul>
+  <div class="note">หรือส่งค่า 2 อย่าง (URL + anon key) มาให้ผมทางแชท เดี๋ยวผมใส่ให้แล้ว push ให้เลย</div></div></div>
+
+<div class="part">Part 3 · โฮสต์ (Cloudflare Pages)</div>
+<div class="step"><div class="num">5</div><div class="body"><h2>เชื่อม repo กับ Cloudflare Pages</h2>
+  <ul><li>สมัคร <b>cloudflare.com</b> (ฟรี) → เมนู <b>Workers & Pages</b> → Create → แท็บ <b>Pages</b> → Connect to Git</li>
+  <li>อนุญาต GitHub แล้วเลือก repo <b>JIANCHA-ROUND</b></li></ul></div></div>
+<div class="step"><div class="num">6</div><div class="body"><h2>ตั้งค่า build</h2>
+  <ul><li>Framework preset: <b>None</b></li><li>Build command: <b>(เว้นว่าง)</b></li>
+  <li><b>Build output directory:</b> <span class="mono">web-supabase</span> ← สำคัญ! (ให้เสิร์ฟเฉพาะเวอร์ชันปลอดภัย)</li>
+  <li>กด <b>Save and Deploy</b> → ได้ลิงก์ <span class="mono">https://xxxx.pages.dev</span></li></ul></div></div>
+
+<div class="part">Part 4 · ล็อกให้เฉพาะพนักงาน (Cloudflare Access)</div>
+<div class="step"><div class="num">7</div><div class="body"><h2>เปิด Zero Trust → Access</h2>
+  <ul><li>Cloudflare Dashboard → <b>Zero Trust</b> → Access → <b>Applications</b> → Add an application → <b>Self-hosted</b></li>
+  <li>Application name: <span class="mono">JIANCHA Rounds</span> · Domain: ใส่ลิงก์ <b>xxxx.pages.dev</b> ของคุณ</li></ul></div></div>
+<div class="step"><div class="num">8</div><div class="body"><h2>ตั้ง Policy อนุญาตเฉพาะองค์กร</h2>
+  <ul><li>Policy name: <span class="mono">Staff only</span> · Action: <b>Allow</b></li>
+  <li>Include → Selector: <b>Emails ending in</b> → <span class="mono">@jianchatea.com</span><br>(หรือ Selector <b>Emails</b> แล้วใส่รายชื่ออีเมลเฉพาะคน)</li>
+  <li>Save → เสร็จ! ต่อไปเปิดเว็บต้องยืนยันอีเมลองค์กรก่อน คนนอกเปิดไม่ได้แม้มีลิงก์</li></ul>
+  <div class="sec">ผลลัพธ์: เปิดเว็บ = ยืนยันอีเมล @jianchatea.com → ใส่รหัสผ่านองค์กร → เห็นข้อมูล (รวมศูนย์ ซิงก์ทุกเครื่อง)</div></div></div>
+
+<div class="note" style="margin-top:1.4rem">ทุก Part ที่ต้องสมัคร/กดในเว็บ ถ้าติดตรงไหนแคปหน้าจอส่งมาได้เลย เดี๋ยวผมประกบให้จนเสร็จครับ</div>
+</div>
+</body></html>
