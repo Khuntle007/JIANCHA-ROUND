@@ -72,9 +72,12 @@ th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-tr
 .kicker{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.16em;color:var(--jc-gold);text-transform:uppercase}
 
 /* calendar */
-.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
-.calgrid .dow{font-family:var(--jc-font-head);font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--jc-stone);text-align:center;padding:.3rem 0}
-.cell{min-height:74px;border:1px solid var(--jc-border);border-radius:var(--radius);padding:.35rem .4rem;background:#fff;cursor:pointer;position:relative;transition:.12s}
+/* home two-column layout */
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:1.6rem;align-items:start}
+@media(max-width:980px){.home-grid{grid-template-columns:1fr}}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calgrid .dow{font-family:var(--jc-font-head);font-size:.62rem;letter-spacing:.04em;text-transform:uppercase;color:var(--jc-stone);text-align:center;padding:.2rem 0}
+.cell{min-height:52px;border:1px solid var(--jc-border);border-radius:var(--radius);padding:.28rem .35rem;background:#fff;cursor:pointer;position:relative;transition:.12s}
 .cell:hover{border-color:var(--jc-gold)}
 .cell.out{background:#f4f2ec;color:#b7b3a9;cursor:default}
 .cell.today{outline:2px solid var(--jc-gold);outline-offset:-2px}
@@ -111,6 +114,25 @@ details.linegroup[open]>summary{border-bottom:1px solid var(--jc-border)}
 details.linegroup[open]>summary::after{content:'▴'}
 details.linegroup .tblwrap{padding:.2rem .5rem .5rem}
 details.linegroup.isempty>summary{opacity:.5}
+/* board tabs + day chips */
+.board-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem}
+.btab{border:1px solid var(--jc-border);background:#fff;border-radius:2px;padding:.35rem .5rem;cursor:pointer;transition:.12s}
+.btab:hover{border-color:var(--jc-gold)}
+.btab.active{border-color:var(--jc-gold);background:var(--jc-cream);box-shadow:inset 0 -2px 0 var(--jc-gold)}
+.board-days{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.2rem;border-top:1px solid var(--jc-border);padding-top:.7rem}
+.dchip{border:1px solid var(--jc-border);background:#fff;border-radius:2px;padding:.35rem .7rem;cursor:pointer;font-family:var(--jc-font-head);font-size:.72rem;letter-spacing:.03em}
+.dchip:hover{border-color:var(--jc-gold)}
+.dchip.active{background:var(--jc-ink);color:#fff;border-color:var(--jc-ink)}
+/* weekly rounds matrix */
+table.wktbl th,table.wktbl td{text-align:center;font-size:.72rem;padding:.4rem .3rem}
+table.wktbl td.wk-on{background:#F3EEE2}
+table.wktbl td.wk-off{color:#c3bfb4}
+table.wktbl .wk-dl{font-size:.62rem;color:var(--jc-stone);margin-top:1px}
+/* nicer name column */
+table.wktbl td.wk-name{text-align:left;white-space:normal;min-width:184px;padding:.6rem .7rem;border-left:3px solid transparent}
+table.wktbl tbody tr:hover td.wk-name{border-left-color:var(--jc-gold);background:#faf9f6}
+table.wktbl td.wk-name .tag{font-size:.66rem;letter-spacing:.03em}
+.wk-prod{font-family:var(--jc-font-thai);font-size:.8rem;font-weight:600;color:var(--jc-ink);margin-top:.32rem;line-height:1.25}
 .toast{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);background:var(--jc-ink);color:#fff;padding:.7rem 1.2rem;border-radius:var(--radius);font-size:.82rem;z-index:200;border-left:3px solid var(--jc-gold);opacity:0;transition:.25s}
 .toast.show{opacity:1}
 .daychips span{display:inline-block;background:var(--jc-cream);border-radius:2px;padding:.1em .45em;margin:1px;font-size:.7rem}
@@ -236,18 +258,37 @@ function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+
 function patToDays(p){const a=[];for(let i=0;i<7;i++)if(p[i]==='1')a.push(i);return a}
 function jsDowToMon(d){return (d+6)%7} // JS 0=Sun -> our 0=Mon
 
+/* ---------- round-slot helpers ----------
+   แต่ละ "รอบสั่ง" (slot) = {order: วันสั่ง 0-6, cutoff: "HH:MM", deliver: วันรับ 0-6} */
+function roundSlots(r){return Array.isArray(r.slots)?r.slots:[]}
+function roundDeliverDays(r){return [...new Set(roundSlots(r).map(s=>s.deliver))]}
+function roundOrderDays(r){return [...new Set(roundSlots(r).map(s=>s.order))]}
+function slotForOrderDay(r,dow){return roundSlots(r).find(s=>s.order===dow)}
+function lineMatch(r,L){return L.cat==='dry'?(r.category==='dry'&&r.warehouse===L.key):(r.category==='fresh'&&r.freshType===L.key)}
+function migrateRound(r){
+  if(Array.isArray(r.slots))return r;
+  const m=(r.condition||'').match(/(\d{1,2})[.:](\d{2})/);
+  const cutoff=m?(m[1].padStart(2,'0')+':'+m[2]):(r.category==='dry'?'15:00':'12:00');
+  const dd=Array.isArray(r.deliveryDays)?r.deliveryDays:[];
+  r.slots=dd.map(d=>({order:(d+6)%7,cutoff,deliver:d}));
+  return r;
+}
+function migrateDB(){ if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)}); }
+
 function buildSeedRounds(days){
-  const fresh=(ft,product,rule,cond)=>({id:uid('r'),category:'fresh',freshType:ft,warehouse:'',product,orderRule:rule,condition:cond,deliveryDays:days});
+  const freshSlots=days.map(d=>({order:(d+6)%7,cutoff:'12:00',deliver:d}));
+  const fresh=(ft,product)=>({id:uid('r'),category:'fresh',freshType:ft,warehouse:'',product,slots:freshSlots.map(s=>({...s}))});
   return [
-    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH001',product:'ของแห้ง–วัตถุดิบทั่วไป',orderRule:'สั่งจันทร์ / พฤหัส',condition:'ตัดรอบ 15.00 น.',deliveryDays:[1,4]},
-    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH002',product:'ของแห้ง–บรรจุภัณฑ์ / อุปกรณ์',orderRule:'สั่งพุธ',condition:'ตัดรอบ 15.00 น.',deliveryDays:[4]},
-    fresh('นมสด','นมสดมาลี / เมจิ','สั่งก่อน 12.00 น. วันก่อนส่ง','Cut off 12.00 น.'),
-    fresh('โยเกิร์ต','โยเกิร์ตพร้อมดื่ม','สั่งก่อน 12.00 น. วันก่อนส่ง','Cut off 12.00 น.'),
-    fresh('วิปปิ้งครีม & ครีมชีส','วิปปิ้งครีม / ครีมชีส','สั่งก่อน 12.00 น. วันก่อนส่ง','Cut off 12.00 น.'),
-    fresh('ผลไม้','ผลไม้สด','สั่งก่อนเที่ยง ส่งวันถัดไป','Cut off 12.00 น.'),
-    fresh('ไอซ์ฮอต','ไอซ์ฮอต','สั่งก่อน 12.00 น. วันก่อนส่ง','Cut off 12.00 น.'),
+    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH001',product:'ของแห้ง–วัตถุดิบทั่วไป',slots:[{order:0,cutoff:'15:00',deliver:1},{order:3,cutoff:'15:00',deliver:4}]},
+    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH002',product:'ของแห้ง–บรรจุภัณฑ์ / อุปกรณ์',slots:[{order:2,cutoff:'15:00',deliver:4}]},
+    fresh('นมสด','นมสดมาลี / เมจิ'),
+    fresh('โยเกิร์ต','โยเกิร์ตพร้อมดื่ม'),
+    fresh('วิปปิ้งครีม & ครีมชีส','วิปปิ้งครีม / ครีมชีส'),
+    fresh('ผลไม้','ผลไม้สด'),
+    fresh('ไอซ์ฮอต','ไอซ์ฮอต'),
   ];
 }
+const DOW_SHORT=['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'];
 function seedDB(){
   const branches = SEED_BRANCHES.map(b=>{
     const ov = DETAIL_OVERRIDE[b.code]||{};
@@ -285,7 +326,7 @@ function seedDB(){
 }
 
 function loadDB(){
-  try{const raw=localStorage.getItem(LS_KEY);if(raw){DB=JSON.parse(raw);return}}catch(e){}
+  try{const raw=localStorage.getItem(LS_KEY);if(raw){DB=JSON.parse(raw);migrateDB();return}}catch(e){}
   DB=seedDB();saveDB();
 }
 function saveDB(){localStorage.setItem(LS_KEY,JSON.stringify(DB))}
@@ -333,14 +374,17 @@ function render(){
   const main=$('#main');
   if(route==='branch') renderBranchDetail(main,u,parts[1]);
   else if(route==='users') renderUsers(main,u);
-  else renderHome(main,u); // home / calendar / branches -> combined page
+  else if(route==='branches') renderBranchList(main,u);
+  else renderHome(main,u); // home / calendar -> ปฏิทิน + บอร์ด
   wireNav();
 }
 
 function chrome(u,route){
   const isAdmin=u.role==='admin';
-  const homeActive=(route==='home'||route==='calendar'||route==='branches')?'active':'';
-  const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน &amp; สาขา</a>`
+  const homeActive=(route==='home'||route==='calendar')?'active':'';
+  const branchesActive=(route==='branches'||route==='branch')?'active':'';
+  const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`
+    +`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`
     +(isAdmin?`<a href="#/users" data-nav="users" class="${route==='users'?'active':''}">สิทธิ์ผู้ใช้</a>`:'');
   return `
   <div class="topbar">
@@ -392,11 +436,53 @@ function renderLogin(){
    CALENDAR + วันหยุด + สาขาที่กระทบ
    ============================================================ */
 function renderHome(main,u){
-  main.innerHTML=`<div id="calWrap"></div>
-    <hr style="width:100%;height:1px;background:var(--jc-border);border:0;margin:2.2rem 0 1.4rem">
-    <div id="branchWrap"></div>`;
-  renderCalendar($('#calWrap'),u);
-  renderBranchList($('#branchWrap'),u);
+  main.innerHTML=`
+    <div class="home-grid">
+      <div class="home-left">
+        <div id="calWrap"></div>
+        <div id="boardWrap" style="margin-top:1.6rem"></div>
+      </div>
+      <aside class="home-right"><div id="affectedWrap"></div></aside>
+    </div>`;
+  renderAffectedPanel($('#affectedWrap'),u); // สร้าง #affected ก่อน
+  renderCalendar($('#calWrap'),u);           // drawCal -> drawAffected เติมข้อมูลฝั่งขวา
+  renderRoundsBoard($('#boardWrap'),u);
+}
+function renderAffectedPanel(main,u){
+  main.innerHTML=`
+    <div class="pagehead" style="margin-bottom:.7rem"><div><div class="kicker">ผลกระทบวันหยุด</div><h2 style="font-size:1.1rem">สาขาที่ได้รับผลกระทบ</h2></div></div>
+    <div id="affected"></div>`;
+}
+
+/* ===== บอร์ดรอบสั่ง: แท็บประเภทสินค้า + เลือกวัน จ.–อา. ===== */
+let boardLine='WH001', boardDay=null;
+function renderRoundsBoard(main,u){
+  if(boardDay==null)boardDay=jsDowToMon(new Date().getDay());
+  const LINES=affectedLines();
+  if(!LINES.some(L=>L.key===boardLine))boardLine=LINES[0].key;
+  main.innerHTML=`
+    <div class="pagehead"><div><div class="kicker">ภาพรวมรอบสั่ง</div><h1>บอร์ดรอบสั่ง–รับของ</h1></div></div>
+    <div class="card">
+      <div class="board-tabs" id="boardTabs">${LINES.map(L=>`<button class="btab ${L.key===boardLine?'active':''}" data-line="${esc(L.key)}"><span class="tag ${L.cat}" style="pointer-events:none">${esc(L.label)}</span></button>`).join('')}</div>
+      <div class="board-days" id="boardDays">${DOW_TH.map((d,i)=>`<button class="dchip ${i===boardDay?'active':''}" data-day="${i}">${d}</button>`).join('')}</div>
+      <div id="boardBody"></div>
+    </div>`;
+  const drawBody=()=>{
+    const L=LINES.find(x=>x.key===boardLine)||LINES[0];
+    const list=visibleBranches(u).map(b=>{
+      const r=(b.rounds||[]).find(rr=>lineMatch(rr,L));
+      const s=r?slotForOrderDay(r,boardDay):null;
+      return s?{b,s}:null;
+    }).filter(Boolean);
+    $('#boardBody').innerHTML=`
+      <div class="grouphead" style="font-size:.82rem;margin-top:1rem"><span class="tag ${L.cat}">${esc(L.label)}</span> <span class="th">รอบสั่งของวัน${DOW_TH[boardDay]}</span><span class="line"></span><span class="pill">${list.length} สาขา</span></div>
+      ${list.length?`<div class="tblwrap"><table><thead><tr><th>รหัส</th><th>สาขา</th><th>ต้องสั่งภายใน</th><th>จะได้รับของวัน</th></tr></thead><tbody>
+        ${list.map(({b,s})=>`<tr><td class="small">${b.code}</td><td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td><td class="th"><b>≤ ${esc(s.cutoff)} น.</b></td><td class="th">${DOW_TH[s.deliver]}</td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty th">ไม่มีสาขาที่มีรอบสั่ง <b>${esc(L.label)}</b> ในวัน${DOW_TH[boardDay]}</div>`}`;
+  };
+  $$('#boardTabs .btab').forEach(t=>t.onclick=()=>{boardLine=t.dataset.line;$$('#boardTabs .btab').forEach(x=>x.classList.toggle('active',x.dataset.line===boardLine));drawBody();});
+  $$('#boardDays .dchip').forEach(t=>t.onclick=()=>{boardDay=+t.dataset.day;$$('#boardDays .dchip').forEach(x=>x.classList.toggle('active',+x.dataset.day===boardDay));drawBody();});
+  drawBody();
 }
 
 let calY, calM;
@@ -413,9 +499,8 @@ function renderCalendar(main,u){
         <button class="btn ghost sm" id="nextM">เดือนถัดไป ›</button>
       </div>
     </div>
-    ${isAdmin?'<div class="banner th">คลิกที่ช่องวันเพื่อ<strong>ตั้ง/ยกเลิกวันหยุด</strong> ระบบจะแสดงรายชื่อสาขาที่มีรอบส่งตรงกับวันนั้นให้ด้านล่าง พร้อมช่องกำหนดรอบจัดส่งเฉพาะกิจ</div>':'<div class="banner th">ปฏิทินแสดงวันหยุดที่แอดมินกำหนด — สาขาที่ได้รับผลกระทบและรอบเลื่อนส่งจะอยู่ด้านล่าง</div>'}
-    <div class="card"><div id="calGrid"></div></div>
-    <div id="affected"></div>`;
+    ${isAdmin?'<div class="banner th small">คลิกที่ช่องวันเพื่อ<strong>ตั้ง/ยกเลิกวันหยุด</strong> — สาขาที่ได้รับผลกระทบจะแสดงทางด้านขวา</div>':'<div class="banner th small">วันหยุดที่แอดมินกำหนด — สาขาที่ได้รับผลกระทบอยู่ด้านขวา</div>'}
+    <div class="card" style="padding:.9rem"><div id="calGrid"></div></div>`;
   $('#prevM').onclick=()=>{calM--;if(calM<0){calM=11;calY--}drawCal(u)};
   $('#nextM').onclick=()=>{calM++;if(calM>11){calM=0;calY++}drawCal(u)};
   drawCal(u);
@@ -466,7 +551,7 @@ function affectedLines(){
           ...FRESH_TYPES.map(f=>({key:f,label:f,cat:'fresh'}))];
 }
 function branchAffectedByLine(b,L,dow){
-  return b.rounds.some(r=>((L.cat==='dry')?(r.category==='dry'&&r.warehouse===L.key):(r.category==='fresh'&&r.freshType===L.key))&&r.deliveryDays.includes(dow));
+  return (b.rounds||[]).some(r=>lineMatch(r,L)&&roundDeliverDays(r).includes(dow));
 }
 function drawAffected(u){
   const isAdmin=u.role==='admin';
@@ -478,7 +563,7 @@ function drawAffected(u){
   let html='';
   hols.forEach(h=>{
     const dow=jsDowToMon(new Date(h.date+'T00:00:00').getDay());
-    const affectedAny=scope.filter(b=>b.rounds.some(r=>r.deliveryDays.includes(dow)));
+    const affectedAny=scope.filter(b=>(b.rounds||[]).some(r=>roundDeliverDays(r).includes(dow)));
     html+=`<div class="card">
       <div class="grouphead"><span style="color:var(--bad)">⚠</span> ${fmtDate(h.date)} · <span class="th">${esc(h.name)}</span> <span class="muted small th">(วัน${DOW_TH[dow]})</span><span class="line"></span><span class="pill">${affectedAny.length} สาขากระทบ</span></div>
       <p class="small muted th" style="margin:.3rem 0 .5rem">แยกตามประเภทสินค้า — กดที่แต่ละประเภทเพื่อดูรายชื่อสาขาและกำหนดรอบจัดส่งเฉพาะกิจ</p>`;
@@ -572,24 +657,34 @@ function toggleExp(btn){
   row.after(tr);
   btn.setAttribute('aria-expanded','true');btn.classList.add('open');
 }
-function roundsMini(b){
-  if(!b.rounds||!b.rounds.length)return `<div class="empty th small" style="border:0">ยังไม่มีรอบสั่ง–ส่ง <a href="#/branch/${b.code}">เพิ่มที่หน้าสาขา ›</a></div>`;
+function sortedRounds(b){
   const order={WH001:1,WH002:2};
-  const rows=b.rounds.slice().sort((x,y)=>{
+  return (b.rounds||[]).slice().sort((x,y)=>{
     if(x.category!==y.category)return x.category==='dry'?-1:1;
     if(x.category==='dry')return (order[x.warehouse]||9)-(order[y.warehouse]||9);
     return FRESH_TYPES.indexOf(x.freshType)-FRESH_TYPES.indexOf(y.freshType);
   });
-  return `<div class="grouphead" style="font-size:.72rem;margin:.2rem 0 .5rem">รอบสั่ง–รอบส่ง · <span class="th">${esc(b.nameEn)}</span><span class="line"></span><a href="#/branch/${b.code}" class="btn sm ghost">ดูหน้าสาขา ›</a></div>
-  <div class="tblwrap"><table><thead><tr><th>คลัง/ชนิด</th><th>สินค้า</th><th>รอบสั่ง</th><th>เงื่อนไขเวลา</th><th>วันจัดส่ง</th></tr></thead><tbody>
-  ${rows.map(r=>`<tr>
-    <td class="small th" style="white-space:nowrap">${r.category==='dry'?`<span class="tag dry">${esc(r.warehouse)}</span>`:`<span class="tag fresh">${esc(r.freshType)}</span>`}</td>
-    <td class="th">${esc(r.product)}</td>
-    <td class="small th">${esc(r.orderRule||'—')}</td>
-    <td class="small th muted">${esc(r.condition||'—')}</td>
-    <td class="daychips" style="white-space:nowrap">${DOW_TH.map((d,i)=>`<span class="${r.deliveryDays.includes(i)?'':'off'}">${d.slice(0,2)}</span>`).join('')}</td>
-  </tr>`).join('')}
-  </tbody></table></div>`;
+}
+/* ตารางรอบสั่งรายสัปดาห์ จ.–อา. (แถว = สินค้า, คอลัมน์ = วัน) */
+function roundsWeekTable(b){
+  const rounds=sortedRounds(b);
+  if(!rounds.length)return '';
+  const head=`<tr><th style="text-align:left">สินค้า</th>${DOW_TH.map(d=>`<th style="text-align:center">${d}</th>`).join('')}</tr>`;
+  const body=rounds.map(r=>{
+    const label=r.category==='dry'?`<span class="tag dry">${esc(r.warehouse)}</span>`:`<span class="tag fresh">${esc(r.freshType)}</span>`;
+    const cells=DOW_TH.map((d,i)=>{
+      const s=slotForOrderDay(r,i);
+      return s?`<td class="wk-on"><b>≤${esc(s.cutoff)}</b><div class="wk-dl">รับ ${DOW_SHORT[s.deliver]}</div></td>`:`<td class="wk-off">—</td>`;
+    }).join('');
+    return `<tr><td class="wk-name">${label}<div class="wk-prod">${esc(r.product)}</div></td>${cells}</tr>`;
+  }).join('');
+  return `<div class="tblwrap"><table class="wktbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+  <div class="small muted th" style="margin-top:.45rem">วิธีอ่าน: ช่องวัน = <b>วันสั่ง</b> · <b>“≤เวลา”</b> = ต้องสั่งภายในเวลานั้น · <b>“รับ (วัน)”</b> = ได้รับของวันนั้น · <b>“—”</b> = วันนั้นไม่มีรอบสั่ง</div>`;
+}
+function roundsMini(b){
+  if(!(b.rounds||[]).length)return `<div class="empty th small" style="border:0">ยังไม่มีรอบสั่ง–ส่ง <a href="#/branch/${b.code}">เพิ่มที่หน้าสาขา ›</a></div>`;
+  return `<div class="grouphead" style="font-size:.72rem;margin:.2rem 0 .5rem">รอบสั่ง–รับของรายสัปดาห์ · <span class="th">${esc(b.nameEn)}</span><span class="line"></span><a href="#/branch/${b.code}" class="btn sm ghost">ดูหน้าสาขา ›</a></div>
+  ${roundsWeekTable(b)}`;
 }
 
 /* ============================================================
@@ -597,14 +692,14 @@ function roundsMini(b){
    ============================================================ */
 function renderBranchDetail(main,u,code){
   const b=branchByCode(code);
-  if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/home" class="btn ghost">‹ กลับ</a></div></div>`;return}
+  if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/branches" class="btn ghost">‹ ทุกสาขา</a></div></div>`;return}
   const isAdmin=u.role==='admin';
   const canEdit=isAdmin||(u.canEdit&&canSeeBranch(u,code));
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">${b.code}</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div>
       <div class="row">
-        <a href="#/home" class="btn ghost sm">‹ ปฏิทิน &amp; สาขา</a>
+        <a href="#/branches" class="btn ghost sm">‹ ทุกสาขา</a>
         <button class="btn ghost sm" id="shareBtn">🔗 แชร์ลิงก์สาขา</button>
         ${isAdmin?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
         ${canEdit?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
@@ -638,19 +733,14 @@ function drawBranchInfo(b){
     </div></div>`;
 }
 function drawRounds(b,canEdit){
-  const rows=b.rounds.map(r=>`<tr>
-    <td>${r.category==='dry'?'<span class="tag dry">ของแห้ง</span>':'<span class="tag fresh">ของสด</span>'}</td>
-    <td class="small th">${r.category==='dry'?esc(r.warehouse||''):esc(r.freshType||'')}</td>
-    <td class="th">${esc(r.product)}</td>
-    <td class="small th">${esc(r.orderRule)}</td>
-    <td class="small th muted">${esc(r.condition||'—')}</td>
-    <td class="daychips">${DOW_TH.map((d,i)=>`<span class="${r.deliveryDays.includes(i)?'':'off'}">${d.slice(0,2)}</span>`).join('')}</td>
-  </tr>`).join('');
+  const has=(b.rounds||[]).length;
   $('#roundsCard').innerHTML=`<div class="card">
-    <div class="grouphead">รอบสั่ง–รอบส่ง <span class="line"></span>${canEdit?`<button class="btn sm gold" id="cfgRounds">⚙ ตั้งค่ารอบ</button>`:''}</div>
-    <div class="tblwrap"><table><thead><tr><th>ประเภท</th><th>คลัง/ชนิด</th><th>สินค้า</th><th>รอบสั่ง</th><th>เงื่อนไขเวลา</th><th>วันจัดส่ง</th></tr></thead>
-    <tbody>${rows||`<tr><td colspan="6" class="empty th" style="border:0">ยังไม่มีรอบ — กด “ตั้งค่ารอบ” เพื่อเพิ่ม</td></tr>`}</tbody></table></div></div>`;
-  if(canEdit)$('#cfgRounds').onclick=()=>branchRoundsModal(b,()=>drawRounds(b,canEdit));
+    <div class="grouphead">รอบสั่ง–รับของ (รายสัปดาห์) <span class="line"></span>${canEdit?`<button class="btn sm ghost" id="addRoundItem">+ เพิ่มสินค้า/คลัง</button> <button class="btn sm gold" id="cfgRounds">⚙ ตั้งค่ารอบ</button>`:''}</div>
+    ${has?roundsWeekTable(b):`<div class="empty th">ยังไม่มีรอบ — กด “+ เพิ่มสินค้า/คลัง” เพื่อเริ่ม</div>`}</div>`;
+  if(canEdit){
+    $('#cfgRounds').onclick=()=>branchRoundsModal(b,()=>drawRounds(b,canEdit));
+    $('#addRoundItem').onclick=()=>branchRoundsModal(b,()=>drawRounds(b,canEdit),{addNew:true});
+  }
 }
 
 /* ----- ORDERS board (PO/TR) ----- */
@@ -757,7 +847,7 @@ function editBranchModal(b,u){
     if(isNew)DB.branches.push(b);
     saveDB();closeModal();render();toast(isNew?'เพิ่มสาขาแล้ว':'บันทึกแล้ว');
   };
-  const db=$('#delBranch');if(db)db.onclick=()=>confirmDialog(`ลบสาขา ${b.nameEn} และออเดอร์ทั้งหมดของสาขานี้?`,()=>{DB.branches=DB.branches.filter(x=>x.code!==b.code);DB.orders=DB.orders.filter(o=>o.branch!==b.code);saveDB();closeModal();go('/home');render();toast('ลบสาขาแล้ว')},{danger:true,yes:'ลบสาขา'});
+  const db=$('#delBranch');if(db)db.onclick=()=>confirmDialog(`ลบสาขา ${b.nameEn} และออเดอร์ทั้งหมดของสาขานี้?`,()=>{DB.branches=DB.branches.filter(x=>x.code!==b.code);DB.orders=DB.orders.filter(o=>o.branch!==b.code);saveDB();closeModal();go('/branches');render();toast('ลบสาขาแล้ว')},{danger:true,yes:'ลบสาขา'});
 }
 
 function roundModal(b){
@@ -788,11 +878,18 @@ function roundModal(b){
   };
 }
 
-function branchRoundsModal(b,onSaved){
-  const dayChecks=(days)=>DOW_TH.map((d,i)=>`<label class="chip"><input type="checkbox" class="rr-day" value="${i}" ${days.includes(i)?'checked':''}> ${d}</label>`).join('');
+function branchRoundsModal(b,onSaved,opts){opts=opts||{};
+  const daySel=(cls,val)=>`<select class="${cls}" style="padding:.3em">${DOW_TH.map((d,i)=>`<option value="${i}" ${i===val?'selected':''}>${d}</option>`).join('')}</select>`;
+  const slotRowHTML=(s)=>{s=s||{order:0,cutoff:'12:00',deliver:1};
+    return `<div class="slotrow" style="display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin:.25rem 0;padding:.3rem .4rem;background:#fff;border:1px solid var(--jc-border);border-radius:2px">
+      <span class="small muted th">สั่งวัน</span>${daySel('sl-order',s.order)}
+      <span class="small muted th">ภายใน</span><input type="time" class="sl-cut" value="${esc(s.cutoff||'12:00')}" style="width:105px;padding:.3em">
+      <span class="small muted th">→ รับวัน</span>${daySel('sl-deliver',s.deliver)}
+      <button class="btn sm ghost sl-del" title="ลบรอบสั่งนี้" style="margin-left:auto">✕</button>
+    </div>`;};
   const rowHTML=(r)=>{
-    r=r||{category:'fresh',warehouse:'WH001',freshType:'นมสด',product:'',orderRule:'',condition:'',deliveryDays:[]};
-    return `<div class="rndrow" data-rid="${uid('rr')}" style="border:1px solid var(--jc-border);border-radius:2px;padding:.75rem .85rem;margin-bottom:.7rem;background:#faf9f6">
+    r=r||{category:'fresh',warehouse:'WH001',freshType:'นมสด',product:'',slots:[{order:0,cutoff:'12:00',deliver:1}]};
+    return `<div class="rndrow" style="border:1px solid var(--jc-border);border-radius:2px;padding:.75rem .85rem;margin-bottom:.7rem;background:#faf9f6">
       <div class="grid3">
         <div class="field"><label>ประเภท</label><select class="rr-cat">
           <option value="dry" ${r.category==='dry'?'selected':''}>ของแห้ง</option>
@@ -801,46 +898,51 @@ function branchRoundsModal(b,onSaved){
         <div class="field rr-ftwrap"><label>ชนิดของสด</label><select class="rr-ft">${FRESH_TYPES.map(f=>`<option ${r.freshType===f?'selected':''}>${f}</option>`).join('')}</select></div>
       </div>
       <div class="field"><label>ชื่อสินค้า</label><input class="rr-prod" value="${esc(r.product)}" placeholder="เช่น นมสดมาลี / เมจิ"></div>
-      <div class="grid2">
-        <div class="field"><label>รอบสั่ง</label><input class="rr-rule" value="${esc(r.orderRule)}" placeholder="เช่น สั่งก่อน 12.00 น. วันก่อนส่ง"></div>
-        <div class="field"><label>เงื่อนไขเวลา</label><input class="rr-cond" value="${esc(r.condition)}" placeholder="เช่น Cut off 12.00 น."></div>
+      <div class="field"><label>รอบสั่ง — สั่งวันไหน ภายในกี่โมง รับของวันไหน</label>
+        <div class="sl-list">${(r.slots||[]).map(slotRowHTML).join('')}</div>
+        <button class="btn sm ghost sl-add" style="margin-top:.3rem">+ เพิ่มรอบสั่ง (อีกวัน)</button>
       </div>
-      <div class="field"><label>วันจัดส่ง</label><div class="row rr-days">${dayChecks(r.deliveryDays)}</div></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn danger sm rr-del">ลบรายการนี้</button></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn danger sm rr-del">ลบสินค้านี้</button></div>
     </div>`;
   };
   openModal(`<div class="modal" style="max-width:720px"><button class="x" onclick="closeModal()">×</button>
-    <h2>ตั้งค่ารอบสั่ง–ส่ง</h2><div class="small muted th" style="margin-bottom:.2rem">${esc(b.nameEn)} · ${b.code}</div>
-    <p class="small muted th" style="margin:.2rem 0 1rem">แก้ไขสินค้า รอบสั่ง เงื่อนไขเวลา และวันจัดส่งของแต่ละรายการ (WH001, WH002 และของสดแต่ละชนิด)</p>
-    <div id="rrList">${b.rounds.map(rowHTML).join('')}</div>
-    <button class="btn ghost sm" id="rrAdd" style="margin-bottom:1rem">+ เพิ่มรายการ</button>
+    <h2>ตั้งค่ารอบสั่ง–รับของ</h2><div class="small muted th" style="margin-bottom:.2rem">${esc(b.nameEn)} · ${b.code}</div>
+    <p class="small muted th" style="margin:.2rem 0 1rem">แต่ละสินค้า กำหนดได้ว่า <b>สั่งวันไหน · ภายในกี่โมง · รับของวันไหน</b> (เพิ่มได้หลายวันต่อสัปดาห์)</p>
+    <div id="rrList">${(b.rounds||[]).map(rowHTML).join('')}</div>
+    <button class="btn ghost sm" id="rrAdd" style="margin-bottom:1rem">+ เพิ่มสินค้า</button>
     <div class="row" style="justify-content:flex-end;border-top:1px solid var(--jc-border);padding-top:.9rem">
       <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
       <button class="btn gold" id="rrSave">บันทึกทั้งหมด</button>
     </div></div>`);
+  const wireSlot=(sr)=>{ sr.querySelector('.sl-del').onclick=()=>sr.remove(); };
   const wireRow=(el)=>{
     const sync=()=>{const dry=el.querySelector('.rr-cat').value==='dry';
       el.querySelector('.rr-whwrap').style.display=dry?'':'none';
       el.querySelector('.rr-ftwrap').style.display=dry?'none':'';};
     el.querySelector('.rr-cat').onchange=sync;sync();
-    el.querySelector('.rr-del').onclick=()=>{el.remove()};
+    el.querySelector('.rr-del').onclick=()=>el.remove();
+    el.querySelectorAll('.slotrow').forEach(wireSlot);
+    el.querySelector('.sl-add').onclick=()=>{const t=document.createElement('div');t.innerHTML=slotRowHTML();const sr=t.firstElementChild;el.querySelector('.sl-list').appendChild(sr);wireSlot(sr);};
   };
   $$('#rrList .rndrow').forEach(wireRow);
-  $('#rrAdd').onclick=()=>{const tmp=document.createElement('div');tmp.innerHTML=rowHTML();const el=tmp.firstElementChild;$('#rrList').appendChild(el);wireRow(el)};
+  $('#rrAdd').onclick=()=>{const t=document.createElement('div');t.innerHTML=rowHTML();const el=t.firstElementChild;$('#rrList').appendChild(el);wireRow(el);el.scrollIntoView({block:'center'});el.querySelector('.rr-prod').focus();};
+  if(opts.addNew)$('#rrAdd').click();
   $('#rrSave').onclick=()=>{
     const rounds=[];
     $$('#rrList .rndrow').forEach(el=>{
       const cat=el.querySelector('.rr-cat').value;
       const prod=el.querySelector('.rr-prod').value.trim();
-      if(!prod)return; // skip empty
+      if(!prod)return;
+      const slots=[...el.querySelectorAll('.slotrow')].map(sr=>({
+        order:+sr.querySelector('.sl-order').value,
+        cutoff:sr.querySelector('.sl-cut').value||'12:00',
+        deliver:+sr.querySelector('.sl-deliver').value}));
       rounds.push({id:uid('r'),category:cat,
         warehouse:cat==='dry'?el.querySelector('.rr-wh').value:'',
         freshType:cat==='fresh'?el.querySelector('.rr-ft').value:'',
-        product:prod,orderRule:el.querySelector('.rr-rule').value.trim(),
-        condition:el.querySelector('.rr-cond').value.trim(),
-        deliveryDays:[...el.querySelectorAll('.rr-day:checked')].map(x=>+x.value)});
+        product:prod,slots});
     });
-    b.rounds=rounds;saveDB();closeModal();toast('บันทึกรอบสั่ง–ส่งแล้ว');if(onSaved)onSaved();
+    b.rounds=rounds;saveDB();closeModal();toast('บันทึกรอบสั่ง–รับของแล้ว');if(onSaved)onSaved();
   };
 }
 

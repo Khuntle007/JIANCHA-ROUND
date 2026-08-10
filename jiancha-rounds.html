@@ -427,9 +427,6 @@ function renderLogin(){
     <div class="field"><label>ชื่อผู้ใช้</label><input id="lu" placeholder="admin"></div>
     <div class="field"><label>รหัสผ่าน</label><input id="lp" type="password" placeholder="••••" ></div>
     <button class="btn gold" id="loginBtn" style="width:100%;margin-top:.4rem">เข้าสู่ระบบ</button>
-    <div class="small muted" style="margin-top:1rem;line-height:1.7">
-      บัญชีทดลอง:<br>• admin / 1234 — แอดมิน (เห็นทุกสาขา)<br>• staff / 1234 — ผู้แก้ไข (3 สาขา)<br>• viewer / 1234 — ผู้ชม (สาขาสยาม)
-    </div>
   </div></div>`;
   const doLogin=()=>{
     const un=$('#lu').value.trim(),pw=$('#lp').value;
