@@ -105,6 +105,14 @@ th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-tr
 /* login */
 .loginwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--jc-ink);padding:2rem}
 .loginbox{background:#fff;max-width:380px;width:100%;padding:2.2rem 2rem;border-radius:var(--radius);border-top:4px solid var(--jc-gold)}
+.pinpad{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-top:.5rem}
+.pinkey{height:54px;font-size:1.3rem;border:1px solid var(--jc-border);background:#fff;border-radius:4px;cursor:pointer;font-family:var(--jc-font-head);color:var(--jc-ink);transition:.1s}
+.pinkey:hover{border-color:var(--jc-gold);background:var(--jc-cream)}
+.pinkey:active{background:var(--jc-gold);color:var(--jc-ink)}
+.pindot{width:14px;height:14px;border-radius:50%;border:2px solid var(--jc-stone);display:inline-block}
+.pindot.on{background:var(--jc-ink);border-color:var(--jc-ink)}
+.loginbox.shake{animation:jcshake .4s}
+@keyframes jcshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .loginbox .emblem{width:52px;height:52px;color:var(--jc-gold)}
 
 /* board group headers */
@@ -255,9 +263,12 @@ const DOW_TH = ["จันทร์","อังคาร","พุธ","พฤห
 const DOW_TH_SUN = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์"]; // JS getDay order
 const FRESH_TYPES = ["นมสด","โยเกิร์ต","วิปปิ้งครีม & ครีมชีส","ผลไม้","ไอซ์ฮอต"];
 const WAREHOUSES = ["WH001","WH002"];
+const ADMIN_ROLES = ["MAIN ADMIN","SCM Manager","WH ADMIN","PCM ADMIN"];
+const ALL_ROLES = [...ADMIN_ROLES,"Operation"];
+function isAdminRole(r){return ADMIN_ROLES.includes(r)}
 
 /* ---------- storage ---------- */
-const LS_KEY='jc_rounds_db_v2';
+const LS_KEY='jc_rounds_db_v3';
 const SS_KEY='jc_rounds_session';
 let DB=null, S={};
 
@@ -310,9 +321,11 @@ function seedDB(){
     };
   });
   const users=[
-    {id:uid('u'),name:'ผู้ดูแลระบบ',username:'admin',password:'1234',role:'admin',scope:'all',canEdit:true},
-    {id:uid('u'),name:'เจ้าหน้าที่คลัง',username:'staff',password:'1234',role:'editor',scope:['JC003','JC004','JC007'],canEdit:true},
-    {id:uid('u'),name:'ผู้ชม (สาขาสยาม)',username:'viewer',password:'1234',role:'viewer',scope:['JC004'],canEdit:false},
+    {id:uid('u'),name:'Main Admin',role:'MAIN ADMIN',pin:'1111',active:true},
+    {id:uid('u'),name:'SCM Manager',role:'SCM Manager',pin:'2222',active:true},
+    {id:uid('u'),name:'WH Admin',role:'WH ADMIN',pin:'3333',active:true},
+    {id:uid('u'),name:'PCM Admin',role:'PCM ADMIN',pin:'4444',active:true},
+    {id:uid('u'),name:'Operation',role:'Operation',pin:'5555',active:true},
   ];
   // sample orders across a few branches, current + last month
   const t=todayISO();
@@ -352,9 +365,9 @@ function branchByCode(c){return DB.branches.find(b=>b.code===c)}
 function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit'})}
 function sameMonth(iso,y,m){return iso.slice(0,7)===`${y}-${String(m+1).padStart(2,'0')}`}
 function curUser(){return DB.users.find(u=>u.id===S.uid)||null}
-function canSeeBranch(u,code){if(!u)return false;if(u.role==='admin'||u.scope==='all')return true;return Array.isArray(u.scope)&&u.scope.includes(code)}
+function canSeeBranch(u,code){return !!u}
 function visibleBranches(u){return DB.branches.filter(b=>canSeeBranch(u,b.code))}
-function canEditBranch(u,code){return !!u&&(u.role==='admin'||(u.canEdit&&canSeeBranch(u,code)))}
+function canEditBranch(u,code){return isAdminRole(u&&u.role)}
 function statusMeta(s){return s==='complete'?{cls:'ok',label:'Complete · ได้รับครบ'}:s==='cut'?{cls:'bad',label:'โดนตัด / ส่งไม่ครบ'}:{cls:'hold',label:'รอชำระเงิน (Hold)'}}
 
 /* ---------- router ---------- */
@@ -389,7 +402,7 @@ function render(){
 }
 
 function chrome(u,route){
-  const isAdmin=u.role==='admin';
+  const isAdmin=isAdminRole(u.role);
   const homeActive=(route==='home'||route==='calendar')?'active':'';
   const branchesActive=(route==='branches'||route==='branch')?'active':'';
   const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`
@@ -406,7 +419,7 @@ function chrome(u,route){
    <div class="foot">JIANCHA · ระบบรอบสั่ง–รอบส่ง — ต้นแบบ (ข้อมูลเก็บในเบราว์เซอร์นี้) · <a href="#" id="resetBtn" class="muted">รีเซ็ตข้อมูลตัวอย่าง</a></div>
   </div>`;
 }
-function roleLabel(r){return r==='admin'?'แอดมิน':r==='editor'?'ผู้แก้ไข':'ผู้ชม'}
+function roleLabel(r){return r||''}
 
 function wireNav(){
   const lb=$('#logoutBtn');if(lb)lb.onclick=()=>{S={};saveSession();go('/calendar');render()};
@@ -416,26 +429,37 @@ function wireNav(){
 /* ============================================================
    LOGIN
    ============================================================ */
+let pinBuf='';
 function renderLogin(){
+  pinBuf='';
+  const keys=['1','2','3','4','5','6','7','8','9','','0','⌫'];
   $('#app').innerHTML=`
-  <div class="loginwrap"><div class="loginbox">
-    <div style="text-align:center;margin-bottom:1.2rem">
-      <span style="display:inline-block;width:52px;color:var(--jc-gold)">${emblemSVG()}</span>
-      <div class="head" style="font-weight:700;letter-spacing:.2em;margin-top:.5rem">JIANCHA</div>
-      <div class="small muted" style="letter-spacing:.14em">ROUNDS SYSTEM · เข้าสู่ระบบ</div>
-    </div>
-    <div class="field"><label>ชื่อผู้ใช้</label><input id="lu" placeholder="admin"></div>
-    <div class="field"><label>รหัสผ่าน</label><input id="lp" type="password" placeholder="••••" ></div>
-    <button class="btn gold" id="loginBtn" style="width:100%;margin-top:.4rem">เข้าสู่ระบบ</button>
+  <div class="loginwrap"><div class="loginbox" id="pinBox" style="max-width:320px;text-align:center">
+    <span style="display:inline-block;width:48px;color:var(--jc-gold)">${emblemSVG()}</span>
+    <div class="head" style="font-weight:700;letter-spacing:.2em;margin-top:.4rem">JIANCHA</div>
+    <div class="small muted" style="letter-spacing:.14em;margin-bottom:1.3rem">ROUNDS SYSTEM</div>
+    <div class="th" style="margin-bottom:.7rem">ใส่ PIN 4 หลัก</div>
+    <div id="pinDots" style="display:flex;gap:.9rem;justify-content:center;margin-bottom:.3rem"></div>
+    <div id="pinMsg" class="small" style="height:1.2rem;color:var(--bad)"></div>
+    <div class="pinpad">${keys.map(k=>k===''?'<span></span>':`<button class="pinkey" data-k="${k}">${k}</button>`).join('')}</div>
   </div></div>`;
-  const doLogin=()=>{
-    const un=$('#lu').value.trim(),pw=$('#lp').value;
-    const u=DB.users.find(x=>x.username===un&&x.password===pw);
-    if(!u){toast('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');return}
+  const drawDots=()=>{$('#pinDots').innerHTML=[0,1,2,3].map(i=>`<span class="pindot ${i<pinBuf.length?'on':''}"></span>`).join('')};
+  const submit=()=>{
+    const u=DB.users.find(x=>x.pin===pinBuf&&x.active!==false);
+    if(!u){pinBuf='';drawDots();$('#pinMsg').textContent='PIN ไม่ถูกต้อง';const bx=$('#pinBox');if(bx){bx.classList.add('shake');setTimeout(()=>bx.classList.remove('shake'),400);}return;}
     S={uid:u.id};saveSession();go('/calendar');render();toast('ยินดีต้อนรับ '+u.name);
   };
-  $('#loginBtn').onclick=doLogin;
-  $('#lp').onkeydown=e=>{if(e.key==='Enter')doLogin()};
+  const press=(k)=>{
+    if(!$('#pinDots'))return;
+    $('#pinMsg').textContent='';
+    if(k==='⌫'){pinBuf=pinBuf.slice(0,-1);drawDots();return;}
+    if(pinBuf.length>=4)return;
+    pinBuf+=k;drawDots();
+    if(pinBuf.length===4)setTimeout(submit,140);
+  };
+  drawDots();
+  $$('.pinkey').forEach(b=>b.onclick=()=>press(b.dataset.k));
+  document.onkeydown=e=>{if(!$('#pinDots'))return;if(/^[0-9]$/.test(e.key))press(e.key);else if(e.key==='Backspace')press('⌫');};
 }
 
 /* ============================================================
@@ -493,7 +517,7 @@ function renderRoundsBoard(main,u){
 
 let calY, calM;
 function renderCalendar(main,u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=isAdminRole(u.role);
   const now=new Date();
   if(calY==null){calY=now.getFullYear();calM=now.getMonth()}
   main.innerHTML=`
@@ -512,7 +536,7 @@ function renderCalendar(main,u){
   drawCal(u);
 }
 function drawCal(u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=isAdminRole(u.role);
   $('#calLabel').textContent=new Date(calY,calM,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   const first=new Date(calY,calM,1); const startMon=jsDowToMon(first.getDay());
   const daysInM=new Date(calY,calM+1,0).getDate();
@@ -560,7 +584,7 @@ function branchAffectedByLine(b,L,dow){
   return (b.rounds||[]).some(r=>lineMatch(r,L)&&roundDeliverDays(r).includes(dow));
 }
 function drawAffected(u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=isAdminRole(u.role);
   const box=$('#affected');
   const hols=DB.holidays.filter(h=>sameMonth(h.date,calY,calM)).sort((a,b)=>a.date<b.date?-1:1);
   if(!hols.length){box.innerHTML=`<div class="card"><div class="empty th">ยังไม่มีวันหยุดในเดือนนี้</div></div>`;return}
@@ -614,7 +638,7 @@ function saveSpecial(date,branch,line,patch){
    BRANCH LIST + ค้นหา + เพิ่มสาขา
    ============================================================ */
 function renderBranchList(main,u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=isAdminRole(u.role);
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">ทะเบียนสาขา</div><h1>สาขาทั้งหมด</h1></div>
@@ -699,8 +723,8 @@ function roundsMini(b){
 function renderBranchDetail(main,u,code){
   const b=branchByCode(code);
   if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/branches" class="btn ghost">‹ ทุกสาขา</a></div></div>`;return}
-  const isAdmin=u.role==='admin';
-  const canEdit=isAdmin||(u.canEdit&&canSeeBranch(u,code));
+  const isAdmin=isAdminRole(u.role);
+  const canEdit=isAdmin;
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">${b.code}</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div>
@@ -752,7 +776,7 @@ function drawRounds(b,canEdit){
 /* ----- ORDERS board (PO/TR) ----- */
 function drawOrders(b,u,opt){
   opt=opt||{};
-  const canEdit=u.role==='admin'||(u.canEdit&&canSeeBranch(u,b.code));
+  const canEdit=isAdminRole(u.role);
   const shareMode=opt.scope==='share';
   let list=DB.orders.filter(o=>o.branch===b.code);
   // share / viewer default: current month only (by order date)
@@ -839,7 +863,7 @@ function editBranchModal(b,u){
       <div class="field"><label>ลิงก์พิกัดแผนที่</label><input id="f_map" value="${esc(b.mapUrl)}"></div>
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:.5rem">
-      ${!isNew&&u.role==='admin'?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
+      ${!isNew&&isAdminRole(u.role)?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
       <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
       <button class="btn gold" id="saveBranch">บันทึก</button>
     </div></div>`);
@@ -1020,56 +1044,52 @@ function historyModal(b){
 /* ============================================================
    USERS / สิทธิ์ผู้ใช้ (admin only)
    ============================================================ */
+function roleAccessText(role){return isAdminRole(role)?'ทำได้ทุกอย่าง':'ดูอย่างเดียว · แชร์ลิงก์ได้ · เห็นเฉพาะปฏิทิน/สาขา'}
 function renderUsers(main,u){
-  if(u.role!=='admin'){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะแอดมินเท่านั้น</div></div>`;return}
+  if(!isAdminRole(u.role)){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะผู้ดูแลเท่านั้น</div></div>`;return}
   main.innerHTML=`
     <div class="pagehead"><div><div class="kicker">การจัดการสิทธิ์</div><h1>ผู้ใช้ &amp; สิทธิ์เข้าถึง</h1></div>
       <button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button></div>
     <div class="card" style="padding:0"><div class="tblwrap"><table>
-      <thead><tr><th>ชื่อ</th><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สิทธิ์แก้ไข</th><th>สาขาที่เข้าถึง</th><th></th></tr></thead>
+      <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>PIN</th><th>สิทธิ์</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>${DB.users.map(x=>`<tr>
-        <td class="th">${esc(x.name)}</td><td class="small">${esc(x.username)}</td>
-        <td><span class="pill">${roleLabel(x.role)}</span></td>
-        <td class="small">${x.canEdit?'✓ แก้ไขได้':'— อ่านอย่างเดียว'}</td>
-        <td class="small th">${x.scope==='all'?'<b>ทุกสาขา</b>':(x.scope||[]).length+' สาขา'}</td>
-        <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button>${x.username!=='admin'?`<button class="btn sm ghost" data-du="${x.id}">ลบ</button>`:''}</td>
-      </tr>`).join('')}</tbody></table></div></div>`;
+        <td class="th">${esc(x.name)}</td>
+        <td><span class="pill">${esc(x.role)}</span></td>
+        <td class="small" style="letter-spacing:.2em">${esc(x.pin||'—')}</td>
+        <td class="small th ${isAdminRole(x.role)?'':'muted'}">${roleAccessText(x.role)}</td>
+        <td class="small">${x.active===false?'<span style="color:var(--bad)">ปิดใช้งาน</span>':'✓ ใช้งาน'}</td>
+        <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button><button class="btn sm ghost" data-du="${x.id}">ลบ</button></td>
+      </tr>`).join('')}</tbody></table></div></div>
+    <div class="small muted th" style="margin-top:.6rem">บทบาท <b>MAIN ADMIN / SCM Manager / WH ADMIN / PCM ADMIN</b> = ทำได้ทุกอย่าง · <b>Operation</b> = ดูอย่างเดียว + แชร์ลิงก์สาขา (เห็นเฉพาะปฏิทิน/สาขา)</div>`;
   $('#addUser').onclick=()=>userModal(null);
   $$('[data-eu]').forEach(x=>x.onclick=()=>userModal(DB.users.find(u=>u.id===x.dataset.eu)));
-  $$('[data-du]').forEach(x=>x.onclick=()=>confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(u=>u.id!==x.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'}));
+  $$('[data-du]').forEach(x=>x.onclick=()=>{
+    if(DB.users.filter(z=>isAdminRole(z.role)).length<=1 && isAdminRole(DB.users.find(z=>z.id===x.dataset.du).role)){toast('ต้องเหลือผู้ดูแลอย่างน้อย 1 คน');return;}
+    confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(u=>u.id!==x.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'});
+  });
 }
 function userModal(x){
   const isNew=!x;
-  x=x||{id:uid('u'),name:'',username:'',password:'1234',role:'viewer',scope:[],canEdit:false};
-  const scopeAll=x.scope==='all';
-  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+  x=x||{id:uid('u'),name:'',role:'Operation',pin:'',active:true};
+  openModal(`<div class="modal" style="max-width:460px"><button class="x" onclick="closeModal()">×</button>
     <h2>${isNew?'เพิ่มผู้ใช้':'แก้ไขผู้ใช้'}</h2><div style="height:.6rem"></div>
-    <div class="grid2">
-      <div class="field"><label>ชื่อ–สกุล</label><input id="u_name" value="${esc(x.name)}"></div>
-      <div class="field"><label>ชื่อผู้ใช้ (login)</label><input id="u_un" value="${esc(x.username)}" ${x.username==='admin'?'readonly':''}></div>
-      <div class="field"><label>รหัสผ่าน</label><input id="u_pw" value="${esc(x.password)}"></div>
-      <div class="field"><label>บทบาท</label><select id="u_role">
-        <option value="admin" ${x.role==='admin'?'selected':''}>แอดมิน (ทุกสิทธิ์)</option>
-        <option value="editor" ${x.role==='editor'?'selected':''}>ผู้แก้ไข</option>
-        <option value="viewer" ${x.role==='viewer'?'selected':''}>ผู้ชม</option>
-      </select></div>
-    </div>
-    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_edit" ${x.canEdit?'checked':''}> อนุญาตให้แก้ไขข้อมูล/ออเดอร์</label></div>
-    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_all" ${scopeAll?'checked':''}> เข้าถึงทุกสาขา</label></div>
-    <div class="field" id="u_scopewrap"><label>เลือกสาขาที่เข้าถึงได้</label>
-      <div class="scopebox">${DB.branches.map(b=>`<label><input type="checkbox" class="u_sc" value="${b.code}" ${Array.isArray(x.scope)&&x.scope.includes(b.code)?'checked':''}> <span class="small">${b.code}</span> · ${esc(b.nameEn)}</label>`).join('')}</div>
-    </div>
+    <div class="field"><label>ชื่อ / ตำแหน่ง</label><input id="u_name" value="${esc(x.name)}" placeholder="เช่น สมชาย (WH)"></div>
+    <div class="field"><label>บทบาท</label><select id="u_role">
+      ${ALL_ROLES.map(r=>`<option ${x.role===r?'selected':''}>${r}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>PIN (4 หลัก)</label><input id="u_pin" inputmode="numeric" maxlength="4" value="${esc(x.pin||'')}" placeholder="เช่น 1234" style="letter-spacing:.3em;font-size:1.1rem"></div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_active" ${x.active!==false?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>
+    <div id="u_rolehint" class="small muted th" style="margin:-.3rem 0 .8rem"></div>
     <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="u_save">บันทึก</button></div></div>`);
-  const syncScope=()=>{$('#u_scopewrap').style.display=($('#u_all').checked||$('#u_role').value==='admin')?'none':''};
-  $('#u_all').onchange=syncScope;$('#u_role').onchange=syncScope;syncScope();
+  const hint=()=>{$('#u_rolehint').textContent='สิทธิ์: '+roleAccessText($('#u_role').value);};
+  $('#u_role').onchange=hint; hint();
+  $('#u_pin').oninput=e=>{e.target.value=e.target.value.replace(/[^0-9]/g,'').slice(0,4);};
   $('#u_save').onclick=()=>{
-    const role=$('#u_role').value;
-    const all=$('#u_all').checked||role==='admin';
-    Object.assign(x,{name:$('#u_name').value.trim(),username:$('#u_un').value.trim(),password:$('#u_pw').value,
-      role,canEdit:role==='admin'?true:$('#u_edit').checked,
-      scope:all?'all':$$('.u_sc:checked').map(i=>i.value)});
-    if(!x.name||!x.username){toast('กรอกชื่อและ username');return}
-    if(isNew&&DB.users.some(u=>u.username===x.username)){toast('username นี้มีอยู่แล้ว');return}
+    const name=$('#u_name').value.trim(), role=$('#u_role').value, pin=$('#u_pin').value.trim();
+    if(!name){toast('กรอกชื่อ');return}
+    if(!/^\d{4}$/.test(pin)){toast('PIN ต้องเป็นตัวเลข 4 หลัก');return}
+    if(DB.users.some(z=>z.pin===pin&&z.id!==x.id)){toast('PIN นี้ถูกใช้แล้ว เลือกเลขอื่น');return}
+    Object.assign(x,{name,role,pin,active:$('#u_active').checked});
     if(isNew)DB.users.push(x);
     saveDB();closeModal();render();toast('บันทึกผู้ใช้แล้ว');
   };
