@@ -350,7 +350,7 @@ function seedDB(){
 }
 
 async function loadDB(){
-  const d=await rpc('load_state',{p_password:S.pw});
+  const d=await rpc('load_state',{p_user:S.u,p_pass:S.p});
   DB = d && typeof d==='object' ? d : {};
   ['branches','users','orders','holidays','specials'].forEach(k=>{if(!Array.isArray(DB[k]))DB[k]=[];});
   migrateDB();
@@ -369,7 +369,7 @@ let _saveTimer=null;
 function saveDB(){ clearTimeout(_saveTimer); _saveTimer=setTimeout(saveDBNow,500); }
 async function saveDBNow(){
   clearTimeout(_saveTimer);
-  try{ await rpc('save_state',{p_password:S.pw,p_data:DB}); }
+  try{ await rpc('save_state',{p_user:S.u,p_pass:S.p,p_data:DB}); }
   catch(e){ toast('บันทึกไม่สำเร็จ: '+e.message); }
 }
 function loadSession(){try{S=JSON.parse(localStorage.getItem(SS_KEY)||'{}')}catch(e){S={}}}
@@ -384,10 +384,24 @@ function emblemSVG(){return $('#emblem-tpl').innerHTML}
 function branchByCode(c){return DB.branches.find(b=>b.code===c)}
 function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit'})}
 function sameMonth(iso,y,m){return iso.slice(0,7)===`${y}-${String(m+1).padStart(2,'0')}`}
-function curUser(){return S.pw?{id:'admin',name:'ผู้ใช้ในองค์กร',role:'admin',scope:'all',canEdit:true}:null}
+/* ---------- ผู้ใช้ & สิทธิ์ ---------- */
+const FEATURES=[
+  {key:'calendar',       label:'ดูปฏิทิน / วันหยุด'},
+  {key:'manageHolidays', label:'ตั้งวันหยุด & รอบจัดส่งเฉพาะกิจ'},
+  {key:'branches',       label:'ดูทะเบียนสาขา'},
+  {key:'editBranch',     label:'เพิ่ม / แก้ข้อมูลสาขา'},
+  {key:'editRounds',     label:'ตั้งค่ารอบสั่ง–ส่ง'},
+  {key:'orders',         label:'ดูออเดอร์ PO / TR'},
+  {key:'editOrders',     label:'เพิ่ม / แก้ออเดอร์'},
+  {key:'manageUsers',    label:'จัดการสิทธิ์ผู้ใช้'},
+];
+function curUser(){return S.me||null}
+function can(perm){const u=curUser();return !!u&&(u.role==='admin'||(u.perms&&u.perms[perm]===true));}
 function canSeeBranch(u,code){if(!u)return false;if(u.role==='admin'||u.scope==='all')return true;return Array.isArray(u.scope)&&u.scope.includes(code)}
 function visibleBranches(u){return DB.branches.filter(b=>canSeeBranch(u,b.code))}
-function canEditBranch(u,code){return !!u&&(u.role==='admin'||(u.canEdit&&canSeeBranch(u,code)))}
+function canEditBranch(u,code){return can('editBranch')&&canSeeBranch(u,code)}
+function canEditRounds(u,code){return can('editRounds')&&canSeeBranch(u,code)}
+function canEditOrders(u,code){return can('editOrders')&&canSeeBranch(u,code)}
 function statusMeta(s){return s==='complete'?{cls:'ok',label:'Complete · ได้รับครบ'}:s==='cut'?{cls:'bad',label:'โดนตัด / ส่งไม่ครบ'}:{cls:'hold',label:'รอชำระเงิน (Hold)'}}
 
 /* ---------- router ---------- */
@@ -404,24 +418,29 @@ function render(){
   const u=curUser();
   if(!u){renderLogin();return}
 
-  const {parts}=parseHash();
-  const route=parts[0]||'calendar';
+  let {parts}=parseHash();
+  let route=parts[0]||'calendar';
+  // สิทธิ์เข้าถึงหน้า
+  if(route==='users'&&!can('manageUsers'))route='home';
+  if((route==='branches'||route==='branch')&&!can('branches')){route=can('calendar')?'home':'branches';}
+  if((route==='home'||route==='calendar')&&!can('calendar')){route=can('branches')?'branches':'home';}
   const app=$('#app');
   app.innerHTML=chrome(u,route);
   const main=$('#main');
-  if(route==='branch') renderBranchDetail(main,u,parts[1]);
-  else if(route==='users') renderUsers(main,u);
-  else if(route==='branches') renderBranchList(main,u);
-  else renderHome(main,u); // home / calendar -> ปฏิทิน + บอร์ด
+  if(route==='branch'&&can('branches')) renderBranchDetail(main,u,parts[1]);
+  else if(route==='users'&&can('manageUsers')) renderUsers(main,u);
+  else if(route==='branches'&&can('branches')) renderBranchList(main,u);
+  else if(can('calendar')) renderHome(main,u);
+  else main.innerHTML=`<div class="card"><div class="empty th">บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าถึงหน้าใด ๆ — ติดต่อผู้ดูแลระบบ</div></div>`;
   wireNav();
 }
 
 function chrome(u,route){
-  const isAdmin=u.role==='admin';
   const homeActive=(route==='home'||route==='calendar')?'active':'';
   const branchesActive=(route==='branches'||route==='branch')?'active':'';
-  const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`
-    +`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`;
+  const nav=(can('calendar')?`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`:'')
+    +(can('branches')?`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`:'')
+    +(can('manageUsers')?`<a href="#/users" data-nav="users" class="${route==='users'?'active':''}">สิทธิ์ผู้ใช้</a>`:'');
   return `
   <div class="topbar">
     <div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ROUNDS SYSTEM</small></div></div>
@@ -433,7 +452,7 @@ function chrome(u,route){
    <div class="foot">JIANCHA · ระบบรอบสั่ง–รอบส่ง — ข้อมูลซิงก์ผ่านฐานข้อมูลกลาง (Supabase) · <a href="#" id="reseedBtn" class="muted">โหลดสาขาเริ่มต้น 61 สาขา</a></div>
   </div>`;
 }
-function roleLabel(r){return r==='admin'?'ผู้ดูแล':r==='editor'?'ผู้แก้ไข':'ผู้ชม'}
+function roleLabel(r){return r==='admin'?'ผู้ดูแล':'ผู้ใช้'}
 
 function wireNav(){
   const lb=$('#logoutBtn');if(lb)lb.onclick=()=>{S={};saveSession();renderLogin();};
@@ -458,24 +477,27 @@ function renderLogin(){
       <div class="small muted" style="letter-spacing:.14em">ROUNDS SYSTEM</div>
     </div>
     ${notReady?`<div class="banner th small" style="margin-bottom:1rem">⚠ ยังไม่ได้ตั้งค่า Supabase — ใส่ค่า <b>SUPA_URL</b> และ <b>SUPA_KEY</b> ที่ด้านบนสุดของสคริปต์ก่อน</div>`:''}
-    <div class="field"><label>รหัสผ่านองค์กร</label><input id="lp" type="password" placeholder="••••••" ${notReady?'disabled':''}></div>
+    <div class="field"><label>ชื่อผู้ใช้</label><input id="lu" placeholder="username" ${notReady?'disabled':''}></div>
+    <div class="field"><label>รหัสผ่าน</label><input id="lp" type="password" placeholder="••••••" ${notReady?'disabled':''}></div>
     <button class="btn gold" id="loginBtn" style="width:100%;margin-top:.4rem" ${notReady?'disabled':''}>เข้าสู่ระบบ</button>
     <div class="small muted" style="margin-top:1rem;line-height:1.6">เข้าถึงเฉพาะผู้ที่ได้รับอนุญาต · ข้อมูลเก็บที่ฐานข้อมูลกลางอย่างปลอดภัย</div>
   </div></div>`;
   const doLogin=async()=>{
-    const pw=$('#lp').value; if(!pw){toast('กรอกรหัสผ่าน');return}
+    const un=$('#lu').value.trim(), pw=$('#lp').value;
+    if(!un||!pw){toast('กรอกชื่อผู้ใช้และรหัสผ่าน');return}
     const btn=$('#loginBtn'); btn.disabled=true; btn.textContent='กำลังเข้าสู่ระบบ...';
-    let ok=false;
-    try{ ok=await rpc('check_password',{p_password:pw}); }
+    let user=null;
+    try{ user=await rpc('login',{p_user:un,p_pass:pw}); }
     catch(e){ toast('เชื่อมต่อฐานข้อมูลไม่ได้: '+e.message); btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; return; }
-    if(!ok){ toast('รหัสผ่านไม่ถูกต้อง'); btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; return; }
-    S={pw}; saveSession();
+    if(!user){ toast('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'); btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; return; }
+    if(user.active===false){ toast('บัญชีนี้ถูกปิดใช้งาน'); btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; return; }
+    S={u:un,p:pw,me:user}; saveSession();
     try{ await loadDB(); await seedIfEmpty(); }
     catch(e){ toast('โหลดข้อมูลไม่สำเร็จ: '+e.message); S={}; saveSession(); btn.disabled=false; btn.textContent='เข้าสู่ระบบ'; return; }
-    render(); toast('เข้าสู่ระบบแล้ว');
+    render(); toast('ยินดีต้อนรับ '+(user.name||un));
   };
   const b=$('#loginBtn'); if(b)b.onclick=doLogin;
-  const p=$('#lp'); if(p)p.onkeydown=e=>{if(e.key==='Enter')doLogin()};
+  ['lu','lp'].forEach(id=>{const el=$('#'+id);if(el)el.onkeydown=e=>{if(e.key==='Enter')doLogin()};});
 }
 
 /* ============================================================
@@ -533,7 +555,7 @@ function renderRoundsBoard(main,u){
 
 let calY, calM;
 function renderCalendar(main,u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=can('manageHolidays');
   const now=new Date();
   if(calY==null){calY=now.getFullYear();calM=now.getMonth()}
   main.innerHTML=`
@@ -552,7 +574,7 @@ function renderCalendar(main,u){
   drawCal(u);
 }
 function drawCal(u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=can('manageHolidays');
   $('#calLabel').textContent=new Date(calY,calM,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   const first=new Date(calY,calM,1); const startMon=jsDowToMon(first.getDay());
   const daysInM=new Date(calY,calM+1,0).getDate();
@@ -600,7 +622,7 @@ function branchAffectedByLine(b,L,dow){
   return (b.rounds||[]).some(r=>lineMatch(r,L)&&roundDeliverDays(r).includes(dow));
 }
 function drawAffected(u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=can('manageHolidays');
   const box=$('#affected');
   const hols=DB.holidays.filter(h=>sameMonth(h.date,calY,calM)).sort((a,b)=>a.date<b.date?-1:1);
   if(!hols.length){box.innerHTML=`<div class="card"><div class="empty th">ยังไม่มีวันหยุดในเดือนนี้</div></div>`;return}
@@ -654,7 +676,7 @@ function saveSpecial(date,branch,line,patch){
    BRANCH LIST + ค้นหา + เพิ่มสาขา
    ============================================================ */
 function renderBranchList(main,u){
-  const isAdmin=u.role==='admin';
+  const isAdmin=can('editBranch');
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">ทะเบียนสาขา</div><h1>สาขาทั้งหมด</h1></div>
@@ -676,7 +698,7 @@ function renderBranchList(main,u){
         <td>${b.type?`<span class="tag ${b.type.toLowerCase()}">${b.type}</span>`:'<span class="muted small">—</span>'}</td>
         <td class="small th">${esc(b.am||'—')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${canEditBranch(u,b.code)?`<button class="expander gear" data-cfg="${b.code}" title="ตั้งค่ารอบสั่ง–ส่ง">⚙</button>`:''}
+          ${canEditRounds(u,b.code)?`<button class="expander gear" data-cfg="${b.code}" title="ตั้งค่ารอบสั่ง–ส่ง">⚙</button>`:''}
           <button class="expander" data-exp="${b.code}" aria-expanded="false" title="ดูรอบสั่ง–รอบส่ง">▾</button>
         </td>
       </tr>`;
@@ -739,25 +761,26 @@ function roundsMini(b){
 function renderBranchDetail(main,u,code){
   const b=branchByCode(code);
   if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/branches" class="btn ghost">‹ ทุกสาขา</a></div></div>`;return}
-  const isAdmin=u.role==='admin';
-  const canEdit=isAdmin||(u.canEdit&&canSeeBranch(u,code));
+  const canEditR=canEditRounds(u,code);
+  const canEditInfo=canEditBranch(u,code);
+  const showHist=can('orders');
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">${b.code}</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div>
       <div class="row">
         <a href="#/branches" class="btn ghost sm">‹ ทุกสาขา</a>
-        ${isAdmin?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
-        ${canEdit?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
+        ${showHist?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
+        ${canEditInfo?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
       </div>
     </div>
     <div id="infoCard"></div>
     <div id="roundsCard"></div>
     <div id="ordersCard"></div>`;
   drawBranchInfo(b);
-  drawRounds(b,canEdit);
+  drawRounds(b,canEditR);
   drawOrders(b,u,{scope:'admin'});
-  if(isAdmin)$('#histBtn').onclick=()=>historyModal(b);
-  if(canEdit)$('#editBranch').onclick=()=>editBranchModal(b,u);
+  if(showHist){const hb=$('#histBtn');if(hb)hb.onclick=()=>historyModal(b);}
+  if(canEditInfo){const eb=$('#editBranch');if(eb)eb.onclick=()=>editBranchModal(b,u);}
 }
 function infoRow(label,val,isLink){
   return `<div style="padding:.4rem 0;border-bottom:1px solid var(--jc-border)"><div class="small muted head" style="font-size:.62rem">${label}</div><div class="th">${val?(isLink?`<a href="${esc(val)}" target="_blank" style="color:var(--jc-gold)">เปิดแผนที่ ↗</a>`:esc(val)):'<span class="muted">—</span>'}</div></div>`;
@@ -790,7 +813,7 @@ function drawRounds(b,canEdit){
 /* ----- ORDERS board (PO/TR) ----- */
 function drawOrders(b,u,opt){
   opt=opt||{};
-  const canEdit=u.role==='admin'||(u.canEdit&&canSeeBranch(u,b.code));
+  const canEdit=canEditOrders(u,b.code);
   const shareMode=opt.scope==='share';
   let list=DB.orders.filter(o=>o.branch===b.code);
   // share / viewer default: current month only (by order date)
@@ -877,7 +900,7 @@ function editBranchModal(b,u){
       <div class="field"><label>ลิงก์พิกัดแผนที่</label><input id="f_map" value="${esc(b.mapUrl)}"></div>
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:.5rem">
-      ${!isNew&&u.role==='admin'?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
+      ${!isNew&&can('editBranch')?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
       <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
       <button class="btn gold" id="saveBranch">บันทึก</button>
     </div></div>`);
@@ -1042,56 +1065,74 @@ function historyModal(b){
 /* ============================================================
    USERS / สิทธิ์ผู้ใช้ (admin only)
    ============================================================ */
+function permSummary(x){
+  if(x.role==='admin')return '<b>ทุกสิทธิ์</b>';
+  const on=FEATURES.filter(f=>x.perms&&x.perms[f.key]);
+  return on.length?on.length+' สิทธิ์':'<span class="muted">ยังไม่กำหนด</span>';
+}
 function renderUsers(main,u){
-  if(u.role!=='admin'){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะแอดมินเท่านั้น</div></div>`;return}
+  if(!can('manageUsers')){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะผู้ดูแลระบบเท่านั้น</div></div>`;return}
   main.innerHTML=`
     <div class="pagehead"><div><div class="kicker">การจัดการสิทธิ์</div><h1>ผู้ใช้ &amp; สิทธิ์เข้าถึง</h1></div>
       <button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button></div>
     <div class="card" style="padding:0"><div class="tblwrap"><table>
-      <thead><tr><th>ชื่อ</th><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สิทธิ์แก้ไข</th><th>สาขาที่เข้าถึง</th><th></th></tr></thead>
+      <thead><tr><th>ชื่อ</th><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สิทธิ์เข้าถึง</th><th>สาขา</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>${DB.users.map(x=>`<tr>
         <td class="th">${esc(x.name)}</td><td class="small">${esc(x.username)}</td>
-        <td><span class="pill">${roleLabel(x.role)}</span></td>
-        <td class="small">${x.canEdit?'✓ แก้ไขได้':'— อ่านอย่างเดียว'}</td>
+        <td><span class="pill">${x.role==='admin'?'ผู้ดูแล':'ผู้ใช้'}</span></td>
+        <td class="small th">${permSummary(x)}</td>
         <td class="small th">${x.scope==='all'?'<b>ทุกสาขา</b>':(x.scope||[]).length+' สาขา'}</td>
+        <td class="small">${x.active===false?'<span style="color:var(--bad)">ปิดใช้งาน</span>':'✓ ใช้งาน'}</td>
         <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button>${x.username!=='admin'?`<button class="btn sm ghost" data-du="${x.id}">ลบ</button>`:''}</td>
-      </tr>`).join('')}</tbody></table></div></div>`;
+      </tr>`).join('')}</tbody></table></div></div>
+    <div class="small muted th" style="margin-top:.6rem">บัญชี <b>admin</b> เป็นผู้ดูแลหลัก (มีทุกสิทธิ์ ลบไม่ได้) · ผู้ใช้อื่นกำหนดสิทธิ์รายฟีเจอร์ + สาขาได้</div>`;
   $('#addUser').onclick=()=>userModal(null);
   $$('[data-eu]').forEach(x=>x.onclick=()=>userModal(DB.users.find(u=>u.id===x.dataset.eu)));
   $$('[data-du]').forEach(x=>x.onclick=()=>confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(u=>u.id!==x.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'}));
 }
 function userModal(x){
   const isNew=!x;
-  x=x||{id:uid('u'),name:'',username:'',password:'1234',role:'viewer',scope:[],canEdit:false};
+  x=x||{id:uid('u'),name:'',username:'',password:'',role:'user',active:true,scope:[],perms:{calendar:true,branches:true,orders:true}};
+  if(!x.perms)x.perms={};
+  const isMainAdmin=x.username==='admin';
   const scopeAll=x.scope==='all';
-  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+  openModal(`<div class="modal" style="max-width:640px"><button class="x" onclick="closeModal()">×</button>
     <h2>${isNew?'เพิ่มผู้ใช้':'แก้ไขผู้ใช้'}</h2><div style="height:.6rem"></div>
     <div class="grid2">
       <div class="field"><label>ชื่อ–สกุล</label><input id="u_name" value="${esc(x.name)}"></div>
-      <div class="field"><label>ชื่อผู้ใช้ (login)</label><input id="u_un" value="${esc(x.username)}" ${x.username==='admin'?'readonly':''}></div>
-      <div class="field"><label>รหัสผ่าน</label><input id="u_pw" value="${esc(x.password)}"></div>
-      <div class="field"><label>บทบาท</label><select id="u_role">
-        <option value="admin" ${x.role==='admin'?'selected':''}>แอดมิน (ทุกสิทธิ์)</option>
-        <option value="editor" ${x.role==='editor'?'selected':''}>ผู้แก้ไข</option>
-        <option value="viewer" ${x.role==='viewer'?'selected':''}>ผู้ชม</option>
+      <div class="field"><label>ชื่อผู้ใช้ (login)</label><input id="u_un" value="${esc(x.username)}" ${isMainAdmin?'readonly':''}></div>
+      <div class="field"><label>รหัสผ่าน</label><input id="u_pw" type="text" value="${esc(x.password||'')}" placeholder="${isNew?'ตั้งรหัสผ่าน':'เว้นว่าง = ไม่เปลี่ยน'}"></div>
+      <div class="field"><label>บทบาท</label><select id="u_role" ${isMainAdmin?'disabled':''}>
+        <option value="admin" ${x.role==='admin'?'selected':''}>ผู้ดูแล (ทุกสิทธิ์)</option>
+        <option value="user" ${x.role!=='admin'?'selected':''}>ผู้ใช้ (กำหนดสิทธิ์เอง)</option>
       </select></div>
     </div>
-    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_edit" ${x.canEdit?'checked':''}> อนุญาตให้แก้ไขข้อมูล/ออเดอร์</label></div>
-    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_all" ${scopeAll?'checked':''}> เข้าถึงทุกสาขา</label></div>
-    <div class="field" id="u_scopewrap"><label>เลือกสาขาที่เข้าถึงได้</label>
-      <div class="scopebox">${DB.branches.map(b=>`<label><input type="checkbox" class="u_sc" value="${b.code}" ${Array.isArray(x.scope)&&x.scope.includes(b.code)?'checked':''}> <span class="small">${b.code}</span> · ${esc(b.nameEn)}</label>`).join('')}</div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_active" ${x.active!==false?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>
+    <div id="u_permsbox">
+      <div class="field"><label>สิทธิ์เข้าถึง (เลือกได้ว่าทำอะไรได้บ้าง)</label>
+        <div class="scopebox">${FEATURES.map(f=>`<label><input type="checkbox" class="u_perm" value="${f.key}" ${x.perms&&x.perms[f.key]?'checked':''}> ${f.label}</label>`).join('')}</div>
+      </div>
+      <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_all" ${scopeAll?'checked':''}> เข้าถึงทุกสาขา</label></div>
+      <div class="field" id="u_scopewrap"><label>เลือกเฉพาะสาขาที่เข้าถึงได้</label>
+        <div class="scopebox">${DB.branches.map(b=>`<label><input type="checkbox" class="u_sc" value="${b.code}" ${Array.isArray(x.scope)&&x.scope.includes(b.code)?'checked':''}> <span class="small">${b.code}</span> · ${esc(b.nameEn)}</label>`).join('')}</div>
+      </div>
     </div>
     <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="u_save">บันทึก</button></div></div>`);
-  const syncScope=()=>{$('#u_scopewrap').style.display=($('#u_all').checked||$('#u_role').value==='admin')?'none':''};
-  $('#u_all').onchange=syncScope;$('#u_role').onchange=syncScope;syncScope();
+  const syncRole=()=>{const admin=$('#u_role').value==='admin';$('#u_permsbox').style.display=admin?'none':'';$('#u_scopewrap').style.display=(admin||$('#u_all').checked)?'none':'';};
+  $('#u_role').onchange=syncRole;$('#u_all').onchange=syncRole;syncRole();
   $('#u_save').onclick=()=>{
     const role=$('#u_role').value;
-    const all=$('#u_all').checked||role==='admin';
-    Object.assign(x,{name:$('#u_name').value.trim(),username:$('#u_un').value.trim(),password:$('#u_pw').value,
-      role,canEdit:role==='admin'?true:$('#u_edit').checked,
-      scope:all?'all':$$('.u_sc:checked').map(i=>i.value)});
-    if(!x.name||!x.username){toast('กรอกชื่อและ username');return}
-    if(isNew&&DB.users.some(u=>u.username===x.username)){toast('username นี้มีอยู่แล้ว');return}
+    const name=$('#u_name').value.trim(), un=$('#u_un').value.trim(), pwv=$('#u_pw').value;
+    if(!name||!un){toast('กรอกชื่อและ username');return}
+    if(isNew&&!pwv){toast('ตั้งรหัสผ่านสำหรับผู้ใช้ใหม่');return}
+    if(isNew&&DB.users.some(u=>u.username===un)){toast('username นี้มีอยู่แล้ว');return}
+    const perms={}; if(role!=='admin')$$('.u_perm:checked').forEach(i=>perms[i.value]=true);
+    x.name=name; if(!isMainAdmin)x.username=un;
+    if(pwv)x.password=pwv;
+    x.role=isMainAdmin?'admin':role;
+    x.active=$('#u_active').checked;
+    x.perms=perms;
+    x.scope=(role==='admin'||$('#u_all').checked)?'all':$$('.u_sc:checked').map(i=>i.value);
     if(isNew)DB.users.push(x);
     saveDB();closeModal();render();toast('บันทึกผู้ใช้แล้ว');
   };
@@ -1101,9 +1142,13 @@ function userModal(x){
 async function boot(){
   loadSession();
   window.addEventListener('hashchange',render);
-  if(S.pw){
-    try{ await loadDB(); await seedIfEmpty(); render(); }
-    catch(e){ S={}; saveSession(); renderLogin(); toast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'); }
+  if(S.u&&S.p){
+    try{
+      const fresh=await rpc('login',{p_user:S.u,p_pass:S.p});
+      if(!fresh||fresh.active===false)throw new Error('re-auth');
+      S.me=fresh; saveSession();
+      await loadDB(); await seedIfEmpty(); render();
+    }catch(e){ S={}; saveSession(); renderLogin(); }
   } else { renderLogin(); }
 }
 boot();

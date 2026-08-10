@@ -34,7 +34,7 @@ ul{margin:.4rem 0 0;padding-left:1.2rem}
 </div>
 <div class="layers">
   <div class="layer"><b>ชั้น 1 · เข้าเว็บ</b>Cloudflare Access — เฉพาะอีเมล @jianchatea.com</div>
-  <div class="layer"><b>ชั้น 2 · เข้าระบบ</b>รหัสผ่านองค์กร (ตรวจฝั่งเซิร์ฟเวอร์)</div>
+  <div class="layer"><b>ชั้น 2 · เข้าระบบ</b>ล็อกอินรายคน (ชื่อผู้ใช้+รหัส) · สิทธิ์แยกตามคน</div>
   <div class="layer"><b>ชั้น 3 · ซอร์สโค้ด</b>repo private + ไม่มี endpoint สาธารณะ</div>
 </div>
 
@@ -44,7 +44,8 @@ ul{margin:.4rem 0 0;padding-left:1.2rem}
   <li>ตั้งชื่อ · ตั้ง Database Password (จดไว้) · Region <b>Singapore</b> → Create (รอ ~2 นาที)</li></ul></div></div>
 <div class="step"><div class="num">2</div><div class="body"><h2>รันสคริปต์ฐานข้อมูล</h2>
   <ul><li>SQL Editor → New query → วางเนื้อ <code>supabase-setup.sql</code></li>
-  <li>🔑 เปลี่ยน <span class="mono">'JIANCHA-CHANGE-ME'</span> เป็น<b>รหัสผ่านองค์กร</b>ที่ต้องการ → Run</li></ul></div></div>
+  <li>🔑 เปลี่ยน <span class="mono">'JIANCHA-CHANGE-ME'</span> เป็น<b>รหัสผ่านของบัญชี admin</b>ที่ต้องการ → Run</li></ul>
+  <div class="note">ล็อกอินครั้งแรก: ชื่อผู้ใช้ <b>admin</b> + รหัสที่ตั้ง → จากนั้นเข้าเมนู <b>สิทธิ์ผู้ใช้</b> สร้างผู้ใช้อื่น + เลือกสิทธิ์รายคนได้</div></div></div>
 <div class="step"><div class="num">3</div><div class="body"><h2>คัดลอกค่า 2 ค่า</h2>
   <ul><li>Project Settings → API → คัดลอก <b>Project URL</b> และ <b>anon public</b> key</li></ul>
   <div class="sec">ปลอดภัย: anon key เปิดข้อมูลไม่ได้ถ้าไม่มีรหัสผ่านองค์กร (ทุก endpoint บังคับรหัส)</div></div></div>
@@ -74,7 +75,7 @@ const SUPA_KEY = 'YOUR-ANON-PUBLIC-KEY';</p>
   <ul><li>Policy name: <span class="mono">Staff only</span> · Action: <b>Allow</b></li>
   <li>Include → Selector: <b>Emails ending in</b> → <span class="mono">@jianchatea.com</span><br>(หรือ Selector <b>Emails</b> แล้วใส่รายชื่ออีเมลเฉพาะคน)</li>
   <li>Save → เสร็จ! ต่อไปเปิดเว็บต้องยืนยันอีเมลองค์กรก่อน คนนอกเปิดไม่ได้แม้มีลิงก์</li></ul>
-  <div class="sec">ผลลัพธ์: เปิดเว็บ = ยืนยันอีเมล @jianchatea.com → ใส่รหัสผ่านองค์กร → เห็นข้อมูล (รวมศูนย์ ซิงก์ทุกเครื่อง)</div></div></div>
+  <div class="sec">ผลลัพธ์: เปิดเว็บ = ยืนยันอีเมล @jianchatea.com → ล็อกอินรายคน → เห็นเฉพาะสิ่งที่ได้รับสิทธิ์ (ข้อมูลรวมศูนย์ ซิงก์ทุกเครื่อง)</div></div></div>
 
 <div class="note" style="margin-top:1.4rem">ทุก Part ที่ต้องสมัคร/กดในเว็บ ถ้าติดตรงไหนแคปหน้าจอส่งมาได้เลย เดี๋ยวผมประกบให้จนเสร็จครับ</div>
 </div>
