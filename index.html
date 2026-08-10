@@ -111,6 +111,11 @@ th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-tr
 .pinkey:active{background:var(--jc-gold);color:var(--jc-ink)}
 .pindot{width:14px;height:14px;border-radius:50%;border:2px solid var(--jc-stone);display:inline-block}
 .pindot.on{background:var(--jc-ink);border-color:var(--jc-ink)}
+table.permtbl th{text-align:center;font-size:.62rem;white-space:nowrap;padding:.45rem .35rem;vertical-align:bottom}
+table.permtbl td{text-align:center;padding:.45rem .35rem}
+table.permtbl tr.inactive{opacity:.5}
+.permcell{width:17px;height:17px;cursor:pointer;accent-color:var(--jc-gold)}
+.scopebox .u_perm{accent-color:var(--jc-gold)}
 .userpick{display:flex;align-items:center;justify-content:space-between;gap:.6rem;width:100%;padding:.7rem .9rem;border:1px solid var(--jc-border);background:#fff;border-radius:4px;cursor:pointer;transition:.12s;font-family:var(--jc-font-thai)}
 .userpick:hover{border-color:var(--jc-gold);background:var(--jc-cream)}
 .loginbox.shake{animation:jcshake .4s}
@@ -268,6 +273,26 @@ const WAREHOUSES = ["WH001","WH002"];
 const ADMIN_ROLES = ["MAIN ADMIN","SCM Manager","WH ADMIN","PCM ADMIN"];
 const ALL_ROLES = [...ADMIN_ROLES,"Operation"];
 function isAdminRole(r){return ADMIN_ROLES.includes(r)}
+/* ทุกฟังก์ชันในเว็บ (ใช้ทำตารางติ๊กสิทธิ์) */
+const FEATURES=[
+  {key:'calendar',       label:'ดูปฏิทิน / วันหยุด',        short:'ปฏิทิน'},
+  {key:'manageHolidays', label:'ตั้งวันหยุด & รอบเฉพาะกิจ', short:'ตั้งวันหยุด'},
+  {key:'branches',       label:'ดูทะเบียนสาขา',            short:'สาขา'},
+  {key:'editBranch',     label:'เพิ่ม / แก้ข้อมูลสาขา',      short:'แก้สาขา'},
+  {key:'editRounds',     label:'ตั้งค่ารอบสั่ง–ส่ง',         short:'ตั้งค่ารอบ'},
+  {key:'orders',         label:'ดูออเดอร์ PO / TR',         short:'ออเดอร์'},
+  {key:'editOrders',     label:'เพิ่ม / แก้ออเดอร์',         short:'แก้ออเดอร์'},
+  {key:'history',        label:'ดูประวัติ 1 ปี',            short:'ประวัติ'},
+  {key:'share',          label:'แชร์ลิงก์สาขา',            short:'แชร์'},
+  {key:'manageUsers',    label:'จัดการสิทธิ์ผู้ใช้',         short:'จัดการสิทธิ์'},
+];
+function defaultPermsForRole(role){
+  const p={};
+  if(isAdminRole(role)){FEATURES.forEach(f=>p[f.key]=true);}
+  else {['calendar','branches','orders','share'].forEach(k=>p[k]=true);} // Operation
+  return p;
+}
+function can(perm){const u=curUser();return !!(u&&u.perms&&u.perms[perm]);}
 
 /* ---------- storage ---------- */
 const LS_KEY='jc_rounds_db_v4';
@@ -295,7 +320,10 @@ function migrateRound(r){
   r.slots=dd.map(d=>({order:(d+6)%7,cutoff,deliver:d}));
   return r;
 }
-function migrateDB(){ if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)}); }
+function migrateDB(){
+  if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
+  if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
+}
 
 function buildSeedRounds(days){
   const freshSlots=days.map(d=>({order:(d+6)%7,cutoff:'12:00',deliver:d}));
@@ -351,7 +379,7 @@ function seedDB(){
 
 function loadDB(){
   try{const raw=localStorage.getItem(LS_KEY);if(raw){DB=JSON.parse(raw);migrateDB();return}}catch(e){}
-  DB=seedDB();saveDB();
+  DB=seedDB();migrateDB();saveDB();
 }
 function saveDB(){localStorage.setItem(LS_KEY,JSON.stringify(DB))}
 function loadSession(){try{S=JSON.parse(sessionStorage.getItem(SS_KEY)||localStorage.getItem(SS_KEY)||'{}')}catch(e){S={}}}
@@ -369,7 +397,9 @@ function sameMonth(iso,y,m){return iso.slice(0,7)===`${y}-${String(m+1).padStart
 function curUser(){return DB.users.find(u=>u.id===S.uid)||null}
 function canSeeBranch(u,code){return !!u}
 function visibleBranches(u){return DB.branches.filter(b=>canSeeBranch(u,b.code))}
-function canEditBranch(u,code){return isAdminRole(u&&u.role)}
+function canEditBranch(u,code){return can('editBranch')}
+function canEditRounds(u,code){return can('editRounds')}
+function canEditOrders(u,code){return can('editOrders')}
 function statusMeta(s){return s==='complete'?{cls:'ok',label:'Complete · ได้รับครบ'}:s==='cut'?{cls:'bad',label:'โดนตัด / ส่งไม่ครบ'}:{cls:'hold',label:'รอชำระเงิน (Hold)'}}
 
 /* ---------- router ---------- */
@@ -392,24 +422,28 @@ function render(){
   if(!u){renderLogin();return}
 
   const {parts}=parseHash();
-  const route=parts[0]||'calendar';
+  let route=parts[0]||'calendar';
+  // สิทธิ์เข้าถึงหน้า
+  if(route==='users'&&!can('manageUsers'))route='home';
+  if((route==='branches'||route==='branch')&&!can('branches'))route=can('calendar')?'home':'branches';
+  if((route==='home'||route==='calendar')&&!can('calendar'))route=can('branches')?'branches':'home';
   const app=$('#app');
   app.innerHTML=chrome(u,route);
   const main=$('#main');
-  if(route==='branch') renderBranchDetail(main,u,parts[1]);
-  else if(route==='users') renderUsers(main,u);
-  else if(route==='branches') renderBranchList(main,u);
-  else renderHome(main,u); // home / calendar -> ปฏิทิน + บอร์ด
+  if(route==='branch'&&can('branches')) renderBranchDetail(main,u,parts[1]);
+  else if(route==='users'&&can('manageUsers')) renderUsers(main,u);
+  else if(route==='branches'&&can('branches')) renderBranchList(main,u);
+  else if(can('calendar')) renderHome(main,u);
+  else main.innerHTML=`<div class="card"><div class="empty th">บัญชีของคุณยังไม่ได้รับสิทธิ์เข้าถึงหน้าใด ๆ — ติดต่อผู้ดูแลระบบ</div></div>`;
   wireNav();
 }
 
 function chrome(u,route){
-  const isAdmin=isAdminRole(u.role);
   const homeActive=(route==='home'||route==='calendar')?'active':'';
   const branchesActive=(route==='branches'||route==='branch')?'active':'';
-  const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`
-    +`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`
-    +(isAdmin?`<a href="#/users" data-nav="users" class="${route==='users'?'active':''}">สิทธิ์ผู้ใช้</a>`:'');
+  const nav=(can('calendar')?`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`:'')
+    +(can('branches')?`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`:'')
+    +(can('manageUsers')?`<a href="#/users" data-nav="users" class="${route==='users'?'active':''}">สิทธิ์ผู้ใช้</a>`:'');
   return `
   <div class="topbar">
     <div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ROUNDS SYSTEM</small></div></div>
@@ -558,7 +592,7 @@ function renderRoundsBoard(main,u){
 
 let calY, calM;
 function renderCalendar(main,u){
-  const isAdmin=isAdminRole(u.role);
+  const isAdmin=can('manageHolidays');
   const now=new Date();
   if(calY==null){calY=now.getFullYear();calM=now.getMonth()}
   main.innerHTML=`
@@ -577,7 +611,7 @@ function renderCalendar(main,u){
   drawCal(u);
 }
 function drawCal(u){
-  const isAdmin=isAdminRole(u.role);
+  const isAdmin=can('manageHolidays');
   $('#calLabel').textContent=new Date(calY,calM,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
   const first=new Date(calY,calM,1); const startMon=jsDowToMon(first.getDay());
   const daysInM=new Date(calY,calM+1,0).getDate();
@@ -625,7 +659,7 @@ function branchAffectedByLine(b,L,dow){
   return (b.rounds||[]).some(r=>lineMatch(r,L)&&roundDeliverDays(r).includes(dow));
 }
 function drawAffected(u){
-  const isAdmin=isAdminRole(u.role);
+  const isAdmin=can('manageHolidays');
   const box=$('#affected');
   const hols=DB.holidays.filter(h=>sameMonth(h.date,calY,calM)).sort((a,b)=>a.date<b.date?-1:1);
   if(!hols.length){box.innerHTML=`<div class="card"><div class="empty th">ยังไม่มีวันหยุดในเดือนนี้</div></div>`;return}
@@ -679,7 +713,7 @@ function saveSpecial(date,branch,line,patch){
    BRANCH LIST + ค้นหา + เพิ่มสาขา
    ============================================================ */
 function renderBranchList(main,u){
-  const isAdmin=isAdminRole(u.role);
+  const isAdmin=can('editBranch');
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">ทะเบียนสาขา</div><h1>สาขาทั้งหมด</h1></div>
@@ -701,7 +735,7 @@ function renderBranchList(main,u){
         <td>${b.type?`<span class="tag ${b.type.toLowerCase()}">${b.type}</span>`:'<span class="muted small">—</span>'}</td>
         <td class="small th">${esc(b.am||'—')}</td>
         <td style="text-align:right;white-space:nowrap">
-          ${canEditBranch(u,b.code)?`<button class="expander gear" data-cfg="${b.code}" title="ตั้งค่ารอบสั่ง–ส่ง">⚙</button>`:''}
+          ${canEditRounds(u,b.code)?`<button class="expander gear" data-cfg="${b.code}" title="ตั้งค่ารอบสั่ง–ส่ง">⚙</button>`:''}
           <button class="expander" data-exp="${b.code}" aria-expanded="false" title="ดูรอบสั่ง–รอบส่ง">▾</button>
         </td>
       </tr>`;
@@ -764,27 +798,27 @@ function roundsMini(b){
 function renderBranchDetail(main,u,code){
   const b=branchByCode(code);
   if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/branches" class="btn ghost">‹ ทุกสาขา</a></div></div>`;return}
-  const isAdmin=isAdminRole(u.role);
-  const canEdit=isAdmin;
+  const canEditR=can('editRounds');
+  const canEditInfo=can('editBranch');
   main.innerHTML=`
     <div class="pagehead">
       <div><div class="kicker">${b.code}</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div>
       <div class="row">
         <a href="#/branches" class="btn ghost sm">‹ ทุกสาขา</a>
-        <button class="btn ghost sm" id="shareBtn">🔗 แชร์ลิงก์สาขา</button>
-        ${isAdmin?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
-        ${canEdit?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
+        ${can('share')?`<button class="btn ghost sm" id="shareBtn">🔗 แชร์ลิงก์สาขา</button>`:''}
+        ${can('history')?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
+        ${canEditInfo?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
       </div>
     </div>
     <div id="infoCard"></div>
     <div id="roundsCard"></div>
     <div id="ordersCard"></div>`;
   drawBranchInfo(b);
-  drawRounds(b,canEdit);
+  drawRounds(b,canEditR);
   drawOrders(b,u,{scope:'admin'});
-  $('#shareBtn').onclick=()=>shareModal(b);
-  if(isAdmin)$('#histBtn').onclick=()=>historyModal(b);
-  if(canEdit)$('#editBranch').onclick=()=>editBranchModal(b,u);
+  {const sb=$('#shareBtn');if(sb)sb.onclick=()=>shareModal(b);}
+  {const hb=$('#histBtn');if(hb)hb.onclick=()=>historyModal(b);}
+  {const eb=$('#editBranch');if(eb)eb.onclick=()=>editBranchModal(b,u);}
 }
 function infoRow(label,val,isLink){
   return `<div style="padding:.4rem 0;border-bottom:1px solid var(--jc-border)"><div class="small muted head" style="font-size:.62rem">${label}</div><div class="th">${val?(isLink?`<a href="${esc(val)}" target="_blank" style="color:var(--jc-gold)">เปิดแผนที่ ↗</a>`:esc(val)):'<span class="muted">—</span>'}</div></div>`;
@@ -817,7 +851,7 @@ function drawRounds(b,canEdit){
 /* ----- ORDERS board (PO/TR) ----- */
 function drawOrders(b,u,opt){
   opt=opt||{};
-  const canEdit=isAdminRole(u.role);
+  const canEdit=can('editOrders');
   const shareMode=opt.scope==='share';
   let list=DB.orders.filter(o=>o.branch===b.code);
   // share / viewer default: current month only (by order date)
@@ -904,7 +938,7 @@ function editBranchModal(b,u){
       <div class="field"><label>ลิงก์พิกัดแผนที่</label><input id="f_map" value="${esc(b.mapUrl)}"></div>
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:.5rem">
-      ${!isNew&&isAdminRole(u.role)?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
+      ${!isNew&&can('editBranch')?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
       <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
       <button class="btn gold" id="saveBranch">บันทึก</button>
     </div></div>`);
@@ -1085,52 +1119,62 @@ function historyModal(b){
 /* ============================================================
    USERS / สิทธิ์ผู้ใช้ (admin only)
    ============================================================ */
-function roleAccessText(role){return isAdminRole(role)?'ทำได้ทุกอย่าง':'ดูอย่างเดียว · แชร์ลิงก์ได้ · เห็นเฉพาะปฏิทิน/สาขา'}
+function usersWithManage(){return DB.users.filter(z=>z.perms&&z.perms.manageUsers)}
 function renderUsers(main,u){
-  if(!isAdminRole(u.role)){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะผู้ดูแลเท่านั้น</div></div>`;return}
+  if(!can('manageUsers')){main.innerHTML=`<div class="card"><div class="empty th">คุณไม่มีสิทธิ์จัดการผู้ใช้</div></div>`;return}
   main.innerHTML=`
     <div class="pagehead"><div><div class="kicker">การจัดการสิทธิ์</div><h1>ผู้ใช้ &amp; สิทธิ์เข้าถึง</h1></div>
       <button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button></div>
-    <div class="card" style="padding:0"><div class="tblwrap"><table>
-      <thead><tr><th>ชื่อ</th><th>บทบาท</th><th>PIN</th><th>สิทธิ์</th><th>สถานะ</th><th></th></tr></thead>
-      <tbody>${DB.users.map(x=>`<tr>
-        <td class="th">${esc(x.name)}</td>
-        <td><span class="pill">${esc(x.role)}</span></td>
-        <td class="small" style="letter-spacing:.2em">${esc(x.pin||'—')}</td>
-        <td class="small th ${isAdminRole(x.role)?'':'muted'}">${roleAccessText(x.role)}</td>
-        <td class="small">${x.active===false?'<span style="color:var(--bad)">ปิดใช้งาน</span>':'✓ ใช้งาน'}</td>
+    <div class="card" style="padding:0"><div class="tblwrap"><table class="permtbl">
+      <thead><tr><th style="text-align:left">ผู้ใช้</th>${FEATURES.map(f=>`<th title="${esc(f.label)}">${esc(f.short)}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${DB.users.map(x=>`<tr class="${x.active===false?'inactive':''}">
+        <td style="text-align:left;white-space:nowrap"><b class="th">${esc(x.name)}</b><div class="small muted">${esc(x.role)}${x.pin?'':' · <span style="color:var(--jc-gold)">ยังไม่ตั้ง PIN</span>'}${x.active===false?' · ปิดใช้งาน':''}</div></td>
+        ${FEATURES.map(f=>`<td><input type="checkbox" class="permcell" data-uid="${x.id}" data-perm="${f.key}" ${x.perms&&x.perms[f.key]?'checked':''}></td>`).join('')}
         <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button><button class="btn sm ghost" data-du="${x.id}">ลบ</button></td>
       </tr>`).join('')}</tbody></table></div></div>
-    <div class="small muted th" style="margin-top:.6rem">บทบาท <b>MAIN ADMIN / SCM Manager / WH ADMIN / PCM ADMIN</b> = ทำได้ทุกอย่าง · <b>Operation</b> = ดูอย่างเดียว + แชร์ลิงก์สาขา (เห็นเฉพาะปฏิทิน/สาขา)</div>`;
+    <div class="small muted th" style="margin-top:.6rem">ติ๊กเพื่อกำหนดสิทธิ์แต่ละฟังก์ชันของผู้ใช้ (บันทึกอัตโนมัติ) · ค่าเริ่มต้นเมื่อเลือกบทบาท: <b>MAIN ADMIN/SCM Manager/WH ADMIN/PCM ADMIN</b> = ทุกฟังก์ชัน · <b>Operation</b> = ดูปฏิทิน/สาขา/ออเดอร์ + แชร์</div>`;
   $('#addUser').onclick=()=>userModal(null);
-  $$('[data-eu]').forEach(x=>x.onclick=()=>userModal(DB.users.find(u=>u.id===x.dataset.eu)));
-  $$('[data-du]').forEach(x=>x.onclick=()=>{
-    if(DB.users.filter(z=>isAdminRole(z.role)).length<=1 && isAdminRole(DB.users.find(z=>z.id===x.dataset.du).role)){toast('ต้องเหลือผู้ดูแลอย่างน้อย 1 คน');return;}
-    confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(u=>u.id!==x.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'});
+  $$('[data-eu]').forEach(el=>el.onclick=()=>userModal(DB.users.find(z=>z.id===el.dataset.eu)));
+  $$('[data-du]').forEach(el=>el.onclick=()=>{
+    const tgt=DB.users.find(z=>z.id===el.dataset.du);
+    if(tgt.perms&&tgt.perms.manageUsers&&usersWithManage().length<=1){toast('ต้องเหลือผู้ที่จัดการสิทธิ์ได้อย่างน้อย 1 คน');return;}
+    confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(z=>z.id!==el.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'});
+  });
+  $$('.permcell').forEach(cb=>cb.onchange=()=>{
+    const usr=DB.users.find(z=>z.id===cb.dataset.uid), perm=cb.dataset.perm;
+    if(!usr.perms)usr.perms={};
+    if(perm==='manageUsers'&&!cb.checked&&usr.perms.manageUsers&&usersWithManage().length<=1){cb.checked=true;toast('ต้องมีผู้ที่จัดการสิทธิ์ได้อย่างน้อย 1 คน');return;}
+    usr.perms[perm]=cb.checked; saveDB();
+    if(usr.id===S.uid)render(); else toast('บันทึกสิทธิ์แล้ว');
   });
 }
 function userModal(x){
   const isNew=!x;
-  x=x||{id:uid('u'),name:'',role:'Operation',pin:'',active:true};
-  openModal(`<div class="modal" style="max-width:460px"><button class="x" onclick="closeModal()">×</button>
-    <h2>${isNew?'เพิ่มผู้ใช้':'แก้ไขผู้ใช้'}</h2><div style="height:.6rem"></div>
-    <div class="field"><label>ชื่อ / ตำแหน่ง</label><input id="u_name" value="${esc(x.name)}" placeholder="เช่น สมชาย (WH)"></div>
-    <div class="field"><label>บทบาท</label><select id="u_role">
-      ${ALL_ROLES.map(r=>`<option ${x.role===r?'selected':''}>${r}</option>`).join('')}
-    </select></div>
-    <div class="field"><label>PIN (4 หลัก)</label><input id="u_pin" inputmode="numeric" maxlength="4" value="${esc(x.pin||'')}" placeholder="เช่น 1234" style="letter-spacing:.3em;font-size:1.1rem"></div>
-    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_active" ${x.active!==false?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>
-    <div id="u_rolehint" class="small muted th" style="margin:-.3rem 0 .8rem"></div>
+  x=x||{id:uid('u'),name:'',role:'Operation',pin:'',active:true,perms:defaultPermsForRole('Operation')};
+  if(!x.perms)x.perms=defaultPermsForRole(x.role);
+  openModal(`<div class="modal" style="max-width:520px"><button class="x" onclick="closeModal()">×</button>
+    <h2>${isNew?'เพิ่มผู้ใช้':'แก้ไขผู้ใช้'}</h2><div style="height:.5rem"></div>
+    <div class="grid2">
+      <div class="field"><label>ชื่อ / ตำแหน่ง</label><input id="u_name" value="${esc(x.name)}" placeholder="เช่น สมชาย (WH)"></div>
+      <div class="field"><label>บทบาท</label><select id="u_role">${ALL_ROLES.map(r=>`<option ${x.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label>PIN (4 หลัก — เว้นว่างได้)</label><input id="u_pin" inputmode="numeric" maxlength="4" value="${esc(x.pin||'')}" placeholder="ให้ผู้ใช้ตั้งเองครั้งแรก" style="letter-spacing:.3em"></div>
+      <div class="field" style="align-self:end"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_active" ${x.active!==false?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>
+    </div>
+    <div class="field"><label>สิทธิ์การเข้าถึง — ติ๊กเลือกฟังก์ชัน <a href="#" id="u_setdefault" class="small" style="color:var(--jc-gold);text-transform:none;letter-spacing:0">(ตั้งตามบทบาท)</a></label>
+      <div class="scopebox">${FEATURES.map(f=>`<label><input type="checkbox" class="u_perm" value="${f.key}" ${x.perms[f.key]?'checked':''}> ${f.label}</label>`).join('')}</div>
+    </div>
     <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="u_save">บันทึก</button></div></div>`);
-  const hint=()=>{$('#u_rolehint').textContent='สิทธิ์: '+roleAccessText($('#u_role').value);};
-  $('#u_role').onchange=hint; hint();
+  const applyRoleDefault=()=>{const d=defaultPermsForRole($('#u_role').value);$$('.u_perm').forEach(cb=>cb.checked=!!d[cb.value]);};
+  $('#u_role').onchange=applyRoleDefault;
+  $('#u_setdefault').onclick=(e)=>{e.preventDefault();applyRoleDefault();};
   $('#u_pin').oninput=e=>{e.target.value=e.target.value.replace(/[^0-9]/g,'').slice(0,4);};
   $('#u_save').onclick=()=>{
     const name=$('#u_name').value.trim(), role=$('#u_role').value, pin=$('#u_pin').value.trim();
     if(!name){toast('กรอกชื่อ');return}
-    if(!/^\d{4}$/.test(pin)){toast('PIN ต้องเป็นตัวเลข 4 หลัก');return}
-    if(DB.users.some(z=>z.pin===pin&&z.id!==x.id)){toast('PIN นี้ถูกใช้แล้ว เลือกเลขอื่น');return}
-    Object.assign(x,{name,role,pin,active:$('#u_active').checked});
+    if(pin&&!/^\d{4}$/.test(pin)){toast('PIN ต้องเป็นตัวเลข 4 หลัก (หรือเว้นว่างให้ผู้ใช้ตั้งเอง)');return}
+    if(pin&&DB.users.some(z=>z.pin===pin&&z.id!==x.id)){toast('PIN นี้ถูกใช้แล้ว เลือกเลขอื่น');return}
+    const perms={}; $$('.u_perm:checked').forEach(i=>perms[i.value]=true);
+    Object.assign(x,{name,role,pin,active:$('#u_active').checked,perms});
     if(isNew)DB.users.push(x);
     saveDB();closeModal();render();toast('บันทึกผู้ใช้แล้ว');
   };
