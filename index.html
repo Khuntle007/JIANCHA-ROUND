@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JIANCHA · ระบบรอบสั่ง–รอบส่ง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;600;700&family=Montserrat:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+:root{
+  --jc-ink:#181818; --jc-gold:#AD9C82; --jc-stone:#545351; --jc-cream:#E0DDD3; --jc-white:#fff;
+  --jc-bg:#F3F1EB; --jc-surface:#fff; --jc-border:rgba(84,83,81,.18);
+  --jc-font-head:'Helios Extended','Archivo','Helvetica Neue',Arial,sans-serif;
+  --jc-font-body:'Montserrat','Helvetica Neue',Arial,sans-serif;
+  --jc-font-thai:'Sarabun','Noto Sans Thai',sans-serif;
+  --ok:#2E7D46; --okbg:#E4F1E8; --bad:#C0392B; --badbg:#FBE7E4; --warn:#C9A227; --warnbg:#FBF3D9;
+  --radius:2px; --maxw:1240px;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--jc-bg);color:var(--jc-ink);font-family:var(--jc-font-thai);line-height:1.55;-webkit-font-smoothing:antialiased;font-size:14px}
+:lang(th),.th{font-family:var(--jc-font-thai)}
+h1,h2,h3,.head{font-family:var(--jc-font-head);letter-spacing:.04em;text-transform:uppercase;margin:0}
+a{color:inherit}
+button{font-family:var(--jc-font-thai);cursor:pointer}
+input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
+.hidden{display:none!important}
+
+/* layout */
+.topbar{background:var(--jc-ink);color:#fff;display:flex;align-items:center;gap:1.2rem;padding:.7rem 1.2rem;position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:.6rem}
+.brand .emblem{width:34px;height:34px;color:var(--jc-gold)}
+.brand .wm{font-family:var(--jc-font-head);font-weight:700;letter-spacing:.18em;font-size:1.05rem}
+.brand .wm small{display:block;letter-spacing:.28em;font-size:.5rem;color:var(--jc-gold);font-family:var(--jc-font-body)}
+.nav{display:flex;gap:.3rem;margin-left:1rem;flex-wrap:wrap}
+.nav a{padding:.45rem .8rem;border-radius:var(--radius);font-size:.8rem;letter-spacing:.03em;text-decoration:none;color:#cfccc4;font-family:var(--jc-font-head);text-transform:uppercase}
+.nav a.active,.nav a:hover{background:rgba(173,156,130,.22);color:#fff}
+.topbar .spacer{flex:1}
+.who{font-size:.78rem;color:#cfccc4;display:flex;align-items:center;gap:.6rem}
+.who b{color:#fff}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:1.4rem 1.2rem 4rem}
+
+/* generic */
+.card{background:var(--jc-surface);border:1px solid var(--jc-border);border-radius:var(--radius);padding:1.2rem 1.3rem}
+.card + .card{margin-top:1.1rem}
+.rule{height:2px;width:52px;background:var(--jc-gold);border:0;margin:0 0 1rem}
+.muted{color:var(--jc-stone)}
+.small{font-size:.78rem}
+.tag{display:inline-block;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;padding:.15em .55em;border-radius:2px;font-family:var(--jc-font-head)}
+.tag.mt{background:var(--jc-ink);color:#fff} .tag.fc{background:var(--jc-gold);color:var(--jc-ink)}
+.tag.dry{background:#4A3F2E;color:#fff} .tag.fresh{background:#2E7D46;color:#fff}
+.btn{border:1px solid var(--jc-ink);background:var(--jc-ink);color:#fff;border-radius:var(--radius);padding:.5em 1.1em;font-size:.78rem;letter-spacing:.04em;text-transform:uppercase;font-family:var(--jc-font-head);transition:.15s}
+.btn:hover{background:transparent;color:var(--jc-ink)}
+.btn.gold{background:var(--jc-gold);border-color:var(--jc-gold);color:var(--jc-ink)}
+.btn.gold:hover{background:transparent;color:#8a7b60}
+.btn.ghost{background:transparent;color:var(--jc-ink)}
+.btn.sm{padding:.32em .7em;font-size:.68rem}
+.btn.danger{border-color:var(--bad);background:var(--bad)} .btn.danger:hover{color:var(--bad);background:transparent}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:.25rem;margin-bottom:.7rem}
+.field label{font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--jc-stone);font-family:var(--jc-font-head)}
+.field input,.field select,.field textarea{padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--jc-gold);outline-offset:-1px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 1rem}
+@media(max-width:720px){.grid2,.grid3{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:.55rem .6rem;border-bottom:1px solid var(--jc-border);vertical-align:middle}
+th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;color:var(--jc-stone);background:#faf9f6}
+.tblwrap{overflow-x:auto}
+.status{border:0;border-radius:2px;padding:.35em .7em;font-size:.72rem;font-weight:600;font-family:var(--jc-font-thai);white-space:nowrap;cursor:pointer}
+.status.ok{background:var(--okbg);color:var(--ok)} .status.bad{background:var(--badbg);color:var(--bad)} .status.hold{background:var(--warnbg);color:#9a7b12}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:.35em}
+.dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.hold{background:var(--warn)}
+
+/* page head */
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+.pagehead h1{font-size:1.5rem}
+.kicker{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.16em;color:var(--jc-gold);text-transform:uppercase}
+
+/* calendar */
+/* home two-column layout */
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:1.6rem;align-items:start}
+@media(max-width:980px){.home-grid{grid-template-columns:1fr}}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calgrid .dow{font-family:var(--jc-font-head);font-size:.62rem;letter-spacing:.04em;text-transform:uppercase;color:var(--jc-stone);text-align:center;padding:.2rem 0}
+.cell{min-height:52px;border:1px solid var(--jc-border);border-radius:var(--radius);padding:.28rem .35rem;background:#fff;cursor:pointer;position:relative;transition:.12s}
+.cell:hover{border-color:var(--jc-gold)}
+.cell.out{background:#f4f2ec;color:#b7b3a9;cursor:default}
+.cell.today{outline:2px solid var(--jc-gold);outline-offset:-2px}
+.cell.holiday{background:#FBE7E4}
+.cell .dnum{font-family:var(--jc-font-head);font-size:.85rem}
+.cell .hname{font-size:.64rem;color:var(--bad);line-height:1.15;margin-top:2px}
+.cell .hbadge{position:absolute;top:4px;right:5px;font-size:.6rem;color:var(--bad)}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(24,24,24,.55);display:flex;align-items:flex-start;justify-content:center;padding:3rem 1rem;z-index:100;overflow:auto}
+.modal{background:#fff;border-radius:var(--radius);max-width:640px;width:100%;padding:1.5rem 1.5rem 1.3rem;border-top:4px solid var(--jc-gold)}
+.modal h2{font-size:1.1rem;margin-bottom:.2rem}
+.modal .x{float:right;border:0;background:none;font-size:1.3rem;line-height:1;color:var(--jc-stone)}
+.chip{display:inline-flex;align-items:center;gap:.3rem;background:var(--jc-cream);border-radius:2px;padding:.2em .5em;font-size:.72rem;margin:.15rem}
+.scopebox{max-height:180px;overflow:auto;border:1px solid var(--jc-border);padding:.5rem;border-radius:var(--radius)}
+.scopebox label{display:flex;gap:.4rem;align-items:center;font-size:.8rem;padding:.15rem 0;text-transform:none;letter-spacing:0;font-family:var(--jc-font-thai);color:var(--jc-ink)}
+
+/* login */
+.loginwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--jc-ink);padding:2rem}
+.loginbox{background:#fff;max-width:380px;width:100%;padding:2.2rem 2rem;border-radius:var(--radius);border-top:4px solid var(--jc-gold)}
+.loginbox .emblem{width:52px;height:52px;color:var(--jc-gold)}
+
+/* board group headers */
+.grouphead{display:flex;align-items:center;gap:.5rem;margin:1.1rem 0 .3rem;font-family:var(--jc-font-head);text-transform:uppercase;letter-spacing:.05em;font-size:.85rem}
+.grouphead .line{flex:1;height:1px;background:var(--jc-border)}
+.empty{padding:1.4rem;text-align:center;color:var(--jc-stone);border:1px dashed var(--jc-border);border-radius:var(--radius)}
+.pill{font-size:.7rem;background:var(--jc-cream);border-radius:20px;padding:.2em .7em;font-family:var(--jc-font-head);letter-spacing:.03em}
+.banner{background:#FBF3D9;border:1px solid #E7D9A0;border-radius:var(--radius);padding:.7rem .9rem;font-size:.82rem;margin-bottom:1rem}
+details.linegroup{border:1px solid var(--jc-border);border-radius:2px;margin-top:.55rem;background:#fff}
+details.linegroup>summary{cursor:pointer;list-style:none;padding:.6rem .85rem;display:flex;align-items:center;gap:.6rem}
+details.linegroup>summary::-webkit-details-marker{display:none}
+details.linegroup>summary::after{content:'▾';margin-left:auto;color:var(--jc-stone);font-size:.8rem}
+details.linegroup[open]>summary{border-bottom:1px solid var(--jc-border)}
+details.linegroup[open]>summary::after{content:'▴'}
+details.linegroup .tblwrap{padding:.2rem .5rem .5rem}
+details.linegroup.isempty>summary{opacity:.5}
+/* board tabs + day chips */
+.board-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.6rem}
+.btab{border:1px solid var(--jc-border);background:#fff;border-radius:2px;padding:.35rem .5rem;cursor:pointer;transition:.12s}
+.btab:hover{border-color:var(--jc-gold)}
+.btab.active{border-color:var(--jc-gold);background:var(--jc-cream);box-shadow:inset 0 -2px 0 var(--jc-gold)}
+.board-days{display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.2rem;border-top:1px solid var(--jc-border);padding-top:.7rem}
+.dchip{border:1px solid var(--jc-border);background:#fff;border-radius:2px;padding:.35rem .7rem;cursor:pointer;font-family:var(--jc-font-head);font-size:.72rem;letter-spacing:.03em}
+.dchip:hover{border-color:var(--jc-gold)}
+.dchip.active{background:var(--jc-ink);color:#fff;border-color:var(--jc-ink)}
+/* weekly rounds matrix */
+table.wktbl th,table.wktbl td{text-align:center;font-size:.72rem;padding:.4rem .3rem}
+table.wktbl td.wk-on{background:#F3EEE2}
+table.wktbl td.wk-off{color:#c3bfb4}
+table.wktbl .wk-dl{font-size:.62rem;color:var(--jc-stone);margin-top:1px}
+/* nicer name column */
+table.wktbl td.wk-name{text-align:left;white-space:normal;min-width:184px;padding:.6rem .7rem;border-left:3px solid transparent}
+table.wktbl tbody tr:hover td.wk-name{border-left-color:var(--jc-gold);background:#faf9f6}
+table.wktbl td.wk-name .tag{font-size:.66rem;letter-spacing:.03em}
+.wk-prod{font-family:var(--jc-font-thai);font-size:.8rem;font-weight:600;color:var(--jc-ink);margin-top:.32rem;line-height:1.25}
+.toast{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);background:var(--jc-ink);color:#fff;padding:.7rem 1.2rem;border-radius:var(--radius);font-size:.82rem;z-index:200;border-left:3px solid var(--jc-gold);opacity:0;transition:.25s}
+.toast.show{opacity:1}
+.daychips span{display:inline-block;background:var(--jc-cream);border-radius:2px;padding:.1em .45em;margin:1px;font-size:.7rem}
+.daychips span.off{background:#f4f2ec;color:#b7b3a9}
+.expander{width:32px;height:32px;border:1px solid var(--jc-border);background:#fff;border-radius:2px;color:var(--jc-stone);font-size:.8rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;transition:.18s}
+.expander:hover{border-color:var(--jc-gold);color:var(--jc-ink)}
+.expander.open{transform:rotate(180deg);border-color:var(--jc-gold);background:var(--jc-gold);color:var(--jc-ink)}
+.expander.gear{margin-right:.35rem}
+.expander.gear:hover{background:var(--jc-cream)}
+tr.exprow td{border-bottom:2px solid var(--jc-gold)}
+.foot{color:var(--jc-stone);font-size:.72rem;text-align:center;padding:2rem 1rem 1rem}
+</style>
+</head>
+<body>
+
+<!-- ================= APP ROOT ================= -->
+<div id="app"></div>
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<!-- inline emblem template -->
+<template id="emblem-tpl">
+<svg class="emblem" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="JIANCHA">
+<g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="100" cy="100" r="82"/>
+<path d="M52 122 L86 74 L108 104 L124 86 L150 122"/>
+<path d="M50 134 q14 -8 26 0 t26 0 t26 0 t22 0"/>
+<path d="M56 148 q14 -8 26 0 t26 0 t26 0"/>
+</g></svg>
+</template>
+
+<script>
+/* ============================================================
+   JIANCHA · ระบบรอบสั่ง–รอบส่ง (Prototype v1)
+   เก็บข้อมูลใน localStorage · ไฟล์เดียว
+   ============================================================ */
+
+/* ---------- seed branch roster (จากไฟล์จริง 61 สาขา) ---------- */
+const SEED_BRANCHES = [
+  {code:"JC001",nameEn:"Dragon town",pattern:"1111100"},
+  {code:"JC002",nameEn:"Fashion ชั้น2",pattern:"1001000"},
+  {code:"JC003",nameEn:"Central World ชั้น7",pattern:"1111100"},
+  {code:"JC004",nameEn:"Siam Paragon ชั้น5",pattern:"1111100"},
+  {code:"JC005",nameEn:"Central Pinklao ชั้นG",pattern:"1000100"},
+  {code:"JC006",nameEn:"The Up RAMA3 ชั้นG",pattern:"1111100"},
+  {code:"JC007",nameEn:"Central RAMA9 ชั้น5",pattern:"1111010"},
+  {code:"JC008",nameEn:"The PARQ Rama4",pattern:"1111010"},
+  {code:"JC009",nameEn:"The Cove Hill",pattern:"1111100"},
+  {code:"JC010",nameEn:"PTT Borrom 97",pattern:"0101000"},
+  {code:"JC011",nameEn:"คลังสินค้า บางพลี",pattern:"1010100"},
+  {code:"JC012",nameEn:"Athenee Tower",pattern:"1111100"},
+  {code:"JC013",nameEn:"Charn Avenue",pattern:"0101000"},
+  {code:"JC014",nameEn:"Mega Bangna",pattern:"1001000"},
+  {code:"JC015",nameEn:"GUMP CROSS",pattern:"1000100"},
+  {code:"JC016",nameEn:"Seacon Bangkae ชั้น1",pattern:"0101000"},
+  {code:"JC017",nameEn:"Future Park Rangsit ชั้นB",pattern:"1010100"},
+  {code:"JC018",nameEn:"Seacon Srinakarin ชั้น2",pattern:"1001000"},
+  {code:"JC019",nameEn:"G-Tower ชั้นB",pattern:"1111010"},
+  {code:"JC020",nameEn:"Icon Siam ชั้น5",pattern:"1000100"},
+  {code:"JC021",nameEn:"One Bangkok ชั้น5",pattern:"1111100"},
+  {code:"JC022",nameEn:"Unilever ชั้น1",pattern:"1111010"},
+  {code:"JC023",nameEn:"Ekkamai Corner ชั้นG",pattern:"1111010"},
+  {code:"JC024",nameEn:"True Digital สุขุมวิท 101 ชั้น2",pattern:"1001000"},
+  {code:"JC025",nameEn:"The Mall Bangkae ชั้นG",pattern:"0101000"},
+  {code:"JC026",nameEn:"Siam Discovery",pattern:"1111100"},
+  {code:"JC027",nameEn:"CW Tower",pattern:"1111010"},
+  {code:"JC028",nameEn:"Central Eastville ชั้น2",pattern:"1001000"},
+  {code:"JC029",nameEn:"The Circle Ratchapruk",pattern:"0101000"},
+  {code:"JC030",nameEn:"Emsphere ชั้น1",pattern:"1111100"},
+  {code:"JC031",nameEn:"Central Westgate ชั้นG",pattern:"0101000"},
+  {code:"JC032",nameEn:"Gateway Bangsue ชั้นG",pattern:"1000100"},
+  {code:"JC033",nameEn:"Esplanade Kaerai ชั้นG",pattern:"0101000"},
+  {code:"JC034",nameEn:"Central Ladprao ชั้น4",pattern:"1010100"},
+  {code:"JC035",nameEn:"Thai Summit ชั้น1",pattern:"1111010"},
+  {code:"JC036",nameEn:"คลังสินค้า CIT cold chain",pattern:"1111100"},
+  {code:"JC037",nameEn:"Emporium ชั้น4",pattern:"1111100"},
+  {code:"JC038",nameEn:"La Villa Ari ชั้น1",pattern:"1111100"},
+  {code:"JC039",nameEn:"Cosmo ชั้น1",pattern:"0101000"},
+  {code:"JC040",nameEn:"Siam Paragon ชั้นG",pattern:"1111100"},
+  {code:"JC041",nameEn:"Sun Tower ชั้น1",pattern:"1010100"},
+  {code:"JC042",nameEn:"Mercury Villa ชั้นG",pattern:"1111100"},
+  {code:"JC043",nameEn:"Maya Chiang Mai",pattern:"0100000"},
+  {code:"JC044",nameEn:"Central World Groove ชั้น1",pattern:"1111100"},
+  {code:"JC045",nameEn:"Avenue Ratchayothin ชั้น1",pattern:"1010100"},
+  {code:"JC046",nameEn:"Town in Town ชั้น1",pattern:"1001000"},
+  {code:"JC047",nameEn:"Chula-Samyan",pattern:"1111100"},
+  {code:"JC048",nameEn:"Passione Rayong ชั้น1",pattern:"0010000"},
+  {code:"JC049",nameEn:"Central Nakhonpathom ชั้น1",pattern:"0100000"},
+  {code:"JC050",nameEn:"Market Place Dusit",pattern:"1000100"},
+  {code:"JC051",nameEn:"Market Place Prachauthit ชั้น1",pattern:"1000100"},
+  {code:"JC052",nameEn:"Central Pattaya ชั้น4",pattern:"0010000"},
+  {code:"JC053",nameEn:"Silom Complex ชั้น1",pattern:"1111100"},
+  {code:"JC054",nameEn:"Little Walk Phrannok ชั้น1",pattern:"0101000"},
+  {code:"JC055",nameEn:"Robinson Ladkrabang ชั้น1",pattern:"1001000"},
+  {code:"JC056",nameEn:"RSD Spoon ดอนเมือง",pattern:"1011100"},
+  {code:"JC057",nameEn:"OR Space ชั้น1",pattern:"1111010"},
+  {code:"JC058",nameEn:"PTT Park Mall Srinakarin",pattern:"1001000"},
+  {code:"JC059",nameEn:"ตลาดกัลปพฤกษ์",pattern:"0101100"},
+  {code:"JC060",nameEn:"Shell รามอินทรา กม.4",pattern:"0101100"},
+  {code:"JC061",nameEn:"เจี้ยนชา โรบินสัน สมุทรปราการ",pattern:"0101100"},
+];
+/* prefilled richer detail for a few real branches (จากไฟล์ของแห้ง) */
+const DETAIL_OVERRIDE = {
+  JC004:{type:"MT",address:"ชั้น 5 ฝั่งเหนือ สยามพารากอน แขวงปทุมวัน เขตปทุมวัน กรุงเทพฯ 10330",mallCondition:"ส่งได้ไม่เกิน 21.00",am:"คุณปาริชาติ"},
+  JC006:{type:"FC",address:"54 อาคารศูนย์การค้า ดิอัพ พระราม 3 ชั้น G ถ.นราธิวาสฯ แขวงช่องนนทรี เขตยานนาวา กรุงเทพฯ 10120",mallCondition:"ส่งได้ไม่เกิน 21.00",am:"คุณปาริชาติ"},
+  JC003:{type:"MT",address:"ชั้น 7 ทางเดินไปไห่ตี้เหลา 999/9 ถ.พระรามที่ 1 แขวงปทุมวัน เขตปทุมวัน กรุงเทพฯ 10330",mallCondition:"เข้าได้ตลอด ก่อน 20.00",am:"คุณธนวัฒน์"},
+  JC007:{type:"MT",address:"ชั้น 5 โซนพลาซ่า ใกล้ธนาคาร ttb 9/9 ถ.พระราม 9 แขวงห้วยขวาง เขตห้วยขวาง กรุงเทพฯ 10320",mallCondition:"เข้าได้ตลอด",am:"คุณธนวัฒน์"},
+  JC014:{type:"MT",address:"ชั้น 1 เลขที่ 39 หมู่ 6 ถ.เทพารักษ์ ต.บางแก้ว อ.บางพลี จ.สมุทรปราการ 10540",mallCondition:"22.00-10.00 และ 14.00-16.00",am:"คุณสุนิสา"},
+  JC009:{type:"FC",address:"28 ถ.เจริญกรุง แขวงวัดพระยาไกร เขตบางคอแหลม กรุงเทพฯ 10120",mallCondition:"ส่งได้ไม่เกิน 21.00",am:"คุณสุนิสา"},
+};
+
+const DOW_TH = ["จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์","อาทิตย์"]; // idx0=Mon
+const DOW_TH_SUN = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์"]; // JS getDay order
+const FRESH_TYPES = ["นมสด","โยเกิร์ต","วิปปิ้งครีม & ครีมชีส","ผลไม้","ไอซ์ฮอต"];
+const WAREHOUSES = ["WH001","WH002"];
+
+/* ---------- storage ---------- */
+const LS_KEY='jc_rounds_db_v2';
+const SS_KEY='jc_rounds_session';
+let DB=null, S={};
+
+function uid(p){return (p||'id')+Math.random().toString(36).slice(2,9)}
+function todayISO(){return new Date().toISOString().slice(0,10)}
+function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function patToDays(p){const a=[];for(let i=0;i<7;i++)if(p[i]==='1')a.push(i);return a}
+function jsDowToMon(d){return (d+6)%7} // JS 0=Sun -> our 0=Mon
+
+/* ---------- round-slot helpers ----------
+   แต่ละ "รอบสั่ง" (slot) = {order: วันสั่ง 0-6, cutoff: "HH:MM", deliver: วันรับ 0-6} */
+function roundSlots(r){return Array.isArray(r.slots)?r.slots:[]}
+function roundDeliverDays(r){return [...new Set(roundSlots(r).map(s=>s.deliver))]}
+function roundOrderDays(r){return [...new Set(roundSlots(r).map(s=>s.order))]}
+function slotForOrderDay(r,dow){return roundSlots(r).find(s=>s.order===dow)}
+function lineMatch(r,L){return L.cat==='dry'?(r.category==='dry'&&r.warehouse===L.key):(r.category==='fresh'&&r.freshType===L.key)}
+function migrateRound(r){
+  if(Array.isArray(r.slots))return r;
+  const m=(r.condition||'').match(/(\d{1,2})[.:](\d{2})/);
+  const cutoff=m?(m[1].padStart(2,'0')+':'+m[2]):(r.category==='dry'?'15:00':'12:00');
+  const dd=Array.isArray(r.deliveryDays)?r.deliveryDays:[];
+  r.slots=dd.map(d=>({order:(d+6)%7,cutoff,deliver:d}));
+  return r;
+}
+function migrateDB(){ if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)}); }
+
+function buildSeedRounds(days){
+  const freshSlots=days.map(d=>({order:(d+6)%7,cutoff:'12:00',deliver:d}));
+  const fresh=(ft,product)=>({id:uid('r'),category:'fresh',freshType:ft,warehouse:'',product,slots:freshSlots.map(s=>({...s}))});
+  return [
+    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH001',product:'ของแห้ง–วัตถุดิบทั่วไป',slots:[{order:0,cutoff:'15:00',deliver:1},{order:3,cutoff:'15:00',deliver:4}]},
+    {id:uid('r'),category:'dry',freshType:'',warehouse:'WH002',product:'ของแห้ง–บรรจุภัณฑ์ / อุปกรณ์',slots:[{order:2,cutoff:'15:00',deliver:4}]},
+    fresh('นมสด','นมสดมาลี / เมจิ'),
+    fresh('โยเกิร์ต','โยเกิร์ตพร้อมดื่ม'),
+    fresh('วิปปิ้งครีม & ครีมชีส','วิปปิ้งครีม / ครีมชีส'),
+    fresh('ผลไม้','ผลไม้สด'),
+    fresh('ไอซ์ฮอต','ไอซ์ฮอต'),
+  ];
+}
+const DOW_SHORT=['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'];
+function seedDB(){
+  const branches = SEED_BRANCHES.map(b=>{
+    const ov = DETAIL_OVERRIDE[b.code]||{};
+    const days = patToDays(b.pattern);
+    return {
+      code:b.code, nameEn:b.nameEn, nameTh:'',
+      address:ov.address||'', phone:ov.phone||'', am:ov.am||'', company:'บริษัท เจี้ยนชา จำกัด',
+      type:ov.type||'', openDate:'', mallCondition:ov.mallCondition||'', mapUrl:'', active:true,
+      rounds:buildSeedRounds(days)
+    };
+  });
+  const users=[
+    {id:uid('u'),name:'ผู้ดูแลระบบ',username:'admin',password:'1234',role:'admin',scope:'all',canEdit:true},
+    {id:uid('u'),name:'เจ้าหน้าที่คลัง',username:'staff',password:'1234',role:'editor',scope:['JC003','JC004','JC007'],canEdit:true},
+    {id:uid('u'),name:'ผู้ชม (สาขาสยาม)',username:'viewer',password:'1234',role:'viewer',scope:['JC004'],canEdit:false},
+  ];
+  // sample orders across a few branches, current + last month
+  const t=todayISO();
+  const mk=(branch,dOffset,docType,docNo,category,warehouse,freshType,product,delivOffset,status,note)=>({
+    id:uid('o'),branch,orderDate:addDays(t,dOffset),docType,docNo,category,warehouse,freshType,product,
+    deliveryDate:addDays(t,dOffset+delivOffset),status,note:note||'',createdAt:addDays(t,dOffset)
+  });
+  const orders=[
+    mk('JC004',-1,'PO','PO-6808-0451','dry','WH001','','ชานมไข่มุกเซ็ต + แก้ว',2,'complete',''),
+    mk('JC004',-2,'TR','TR-6808-1120','fresh','','นมสด','นมสดมาลี 2 ลัง',1,'cut','ตัดออก 1 ลัง นมไม่พอสต็อก'),
+    mk('JC004',-3,'PO','PO-6808-0447','dry','WH002','','บรรจุภัณฑ์ถุงหูหิ้ว',3,'hold','รอชำระเงินก่อนจัดส่ง'),
+    mk('JC004',-5,'TR','TR-6808-1098','fresh','','ผลไม้','สตรอว์เบอร์รี + องุ่น',1,'complete',''),
+    mk('JC004',-8,'TR','TR-6808-1044','fresh','','โยเกิร์ต','โยเกิร์ตพร้อมดื่ม 24 ขวด',1,'complete',''),
+    mk('JC003',-1,'PO','PO-6808-0460','dry','WH001','','ใบชาอู่หลง 5 กก.',2,'complete',''),
+    mk('JC003',-4,'TR','TR-6808-1071','fresh','','วิปปิ้งครีม & ครีมชีส','วิปปิ้งครีม 12 กล่อง',1,'cut','ส่งได้ 8 กล่อง'),
+    mk('JC007',-2,'TR','TR-6808-1130','fresh','','ไอซ์ฮอต','ไอซ์ฮอตเจล 3 ลัง',1,'hold','รอชำระเงิน'),
+    mk('JC007',-6,'PO','PO-6808-0433','dry','WH001','','แก้วพลาสติก 90 มม.',2,'complete',''),
+  ];
+  return {version:1, branches, users, orders, holidays:[], specials:[]};
+}
+
+function loadDB(){
+  try{const raw=localStorage.getItem(LS_KEY);if(raw){DB=JSON.parse(raw);migrateDB();return}}catch(e){}
+  DB=seedDB();saveDB();
+}
+function saveDB(){localStorage.setItem(LS_KEY,JSON.stringify(DB))}
+function loadSession(){try{S=JSON.parse(sessionStorage.getItem(SS_KEY)||localStorage.getItem(SS_KEY)||'{}')}catch(e){S={}}}
+function saveSession(){localStorage.setItem(SS_KEY,JSON.stringify(S))}
+
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+function esc(x){return (x==null?'':String(x)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200)}
+function emblemSVG(){return $('#emblem-tpl').innerHTML}
+function branchByCode(c){return DB.branches.find(b=>b.code===c)}
+function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit'})}
+function sameMonth(iso,y,m){return iso.slice(0,7)===`${y}-${String(m+1).padStart(2,'0')}`}
+function curUser(){return DB.users.find(u=>u.id===S.uid)||null}
+function canSeeBranch(u,code){if(!u)return false;if(u.role==='admin'||u.scope==='all')return true;return Array.isArray(u.scope)&&u.scope.includes(code)}
+function visibleBranches(u){return DB.branches.filter(b=>canSeeBranch(u,b.code))}
+function canEditBranch(u,code){return !!u&&(u.role==='admin'||(u.canEdit&&canSeeBranch(u,code)))}
+function statusMeta(s){return s==='complete'?{cls:'ok',label:'Complete · ได้รับครบ'}:s==='cut'?{cls:'bad',label:'โดนตัด / ส่งไม่ครบ'}:{cls:'hold',label:'รอชำระเงิน (Hold)'}}
+
+/* ---------- router ---------- */
+function go(hash){location.hash=hash}
+function parseHash(){
+  const h=location.hash.replace(/^#/,'')||'/calendar';
+  const [path,qs]=h.split('?');
+  const parts=path.split('/').filter(Boolean);
+  const q=Object.fromEntries(new URLSearchParams(qs||''));
+  return {parts,q};
+}
+
+function render(){
+  loadSession();
+  // ---- SHARE MODE via ?branch=CODE (no login required) ----
+  const url=new URLSearchParams(location.search);
+  if(url.get('branch')){renderShare(url.get('branch'));return}
+
+  const u=curUser();
+  if(!u){renderLogin();return}
+
+  const {parts}=parseHash();
+  const route=parts[0]||'calendar';
+  const app=$('#app');
+  app.innerHTML=chrome(u,route);
+  const main=$('#main');
+  if(route==='branch') renderBranchDetail(main,u,parts[1]);
+  else if(route==='users') renderUsers(main,u);
+  else if(route==='branches') renderBranchList(main,u);
+  else renderHome(main,u); // home / calendar -> ปฏิทิน + บอร์ด
+  wireNav();
+}
+
+function chrome(u,route){
+  const isAdmin=u.role==='admin';
+  const homeActive=(route==='home'||route==='calendar')?'active':'';
+  const branchesActive=(route==='branches'||route==='branch')?'active':'';
+  const nav=`<a href="#/home" data-nav="home" class="${homeActive}">ปฏิทิน</a>`
+    +`<a href="#/branches" data-nav="branches" class="${branchesActive}">สาขา</a>`
+    +(isAdmin?`<a href="#/users" data-nav="users" class="${route==='users'?'active':''}">สิทธิ์ผู้ใช้</a>`:'');
+  return `
+  <div class="topbar">
+    <div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ROUNDS SYSTEM</small></div></div>
+    <div class="nav">${nav}</div>
+    <div class="spacer"></div>
+    <div class="who"><span>${esc(u.name)} · <b>${roleLabel(u.role)}</b></span><button class="btn sm ghost" id="logoutBtn">ออกจากระบบ</button></div>
+  </div>
+  <div class="wrap"><div id="main"></div>
+   <div class="foot">JIANCHA · ระบบรอบสั่ง–รอบส่ง — ต้นแบบ (ข้อมูลเก็บในเบราว์เซอร์นี้) · <a href="#" id="resetBtn" class="muted">รีเซ็ตข้อมูลตัวอย่าง</a></div>
+  </div>`;
+}
+function roleLabel(r){return r==='admin'?'แอดมิน':r==='editor'?'ผู้แก้ไข':'ผู้ชม'}
+
+function wireNav(){
+  const lb=$('#logoutBtn');if(lb)lb.onclick=()=>{S={};saveSession();go('/calendar');render()};
+  const rb=$('#resetBtn');if(rb)rb.onclick=(e)=>{e.preventDefault();confirmDialog('รีเซ็ตข้อมูลทั้งหมดกลับเป็นค่าตัวอย่าง?',()=>{localStorage.removeItem(LS_KEY);loadDB();render();toast('รีเซ็ตข้อมูลแล้ว')},{danger:true,yes:'รีเซ็ต'});};
+}
+
+/* ============================================================
+   LOGIN
+   ============================================================ */
+function renderLogin(){
+  $('#app').innerHTML=`
+  <div class="loginwrap"><div class="loginbox">
+    <div style="text-align:center;margin-bottom:1.2rem">
+      <span style="display:inline-block;width:52px;color:var(--jc-gold)">${emblemSVG()}</span>
+      <div class="head" style="font-weight:700;letter-spacing:.2em;margin-top:.5rem">JIANCHA</div>
+      <div class="small muted" style="letter-spacing:.14em">ROUNDS SYSTEM · เข้าสู่ระบบ</div>
+    </div>
+    <div class="field"><label>ชื่อผู้ใช้</label><input id="lu" placeholder="admin"></div>
+    <div class="field"><label>รหัสผ่าน</label><input id="lp" type="password" placeholder="••••" ></div>
+    <button class="btn gold" id="loginBtn" style="width:100%;margin-top:.4rem">เข้าสู่ระบบ</button>
+    <div class="small muted" style="margin-top:1rem;line-height:1.7">
+      บัญชีทดลอง:<br>• admin / 1234 — แอดมิน (เห็นทุกสาขา)<br>• staff / 1234 — ผู้แก้ไข (3 สาขา)<br>• viewer / 1234 — ผู้ชม (สาขาสยาม)
+    </div>
+  </div></div>`;
+  const doLogin=()=>{
+    const un=$('#lu').value.trim(),pw=$('#lp').value;
+    const u=DB.users.find(x=>x.username===un&&x.password===pw);
+    if(!u){toast('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');return}
+    S={uid:u.id};saveSession();go('/calendar');render();toast('ยินดีต้อนรับ '+u.name);
+  };
+  $('#loginBtn').onclick=doLogin;
+  $('#lp').onkeydown=e=>{if(e.key==='Enter')doLogin()};
+}
+
+/* ============================================================
+   CALENDAR + วันหยุด + สาขาที่กระทบ
+   ============================================================ */
+function renderHome(main,u){
+  main.innerHTML=`
+    <div class="home-grid">
+      <div class="home-left">
+        <div id="calWrap"></div>
+        <div id="boardWrap" style="margin-top:1.6rem"></div>
+      </div>
+      <aside class="home-right"><div id="affectedWrap"></div></aside>
+    </div>`;
+  renderAffectedPanel($('#affectedWrap'),u); // สร้าง #affected ก่อน
+  renderCalendar($('#calWrap'),u);           // drawCal -> drawAffected เติมข้อมูลฝั่งขวา
+  renderRoundsBoard($('#boardWrap'),u);
+}
+function renderAffectedPanel(main,u){
+  main.innerHTML=`
+    <div class="pagehead" style="margin-bottom:.7rem"><div><div class="kicker">ผลกระทบวันหยุด</div><h2 style="font-size:1.1rem">สาขาที่ได้รับผลกระทบ</h2></div></div>
+    <div id="affected"></div>`;
+}
+
+/* ===== บอร์ดรอบสั่ง: แท็บประเภทสินค้า + เลือกวัน จ.–อา. ===== */
+let boardLine='WH001', boardDay=null;
+function renderRoundsBoard(main,u){
+  if(boardDay==null)boardDay=jsDowToMon(new Date().getDay());
+  const LINES=affectedLines();
+  if(!LINES.some(L=>L.key===boardLine))boardLine=LINES[0].key;
+  main.innerHTML=`
+    <div class="pagehead"><div><div class="kicker">ภาพรวมรอบสั่ง</div><h1>บอร์ดรอบสั่ง–รับของ</h1></div></div>
+    <div class="card">
+      <div class="board-tabs" id="boardTabs">${LINES.map(L=>`<button class="btab ${L.key===boardLine?'active':''}" data-line="${esc(L.key)}"><span class="tag ${L.cat}" style="pointer-events:none">${esc(L.label)}</span></button>`).join('')}</div>
+      <div class="board-days" id="boardDays">${DOW_TH.map((d,i)=>`<button class="dchip ${i===boardDay?'active':''}" data-day="${i}">${d}</button>`).join('')}</div>
+      <div id="boardBody"></div>
+    </div>`;
+  const drawBody=()=>{
+    const L=LINES.find(x=>x.key===boardLine)||LINES[0];
+    const list=visibleBranches(u).map(b=>{
+      const r=(b.rounds||[]).find(rr=>lineMatch(rr,L));
+      const s=r?slotForOrderDay(r,boardDay):null;
+      return s?{b,s}:null;
+    }).filter(Boolean);
+    $('#boardBody').innerHTML=`
+      <div class="grouphead" style="font-size:.82rem;margin-top:1rem"><span class="tag ${L.cat}">${esc(L.label)}</span> <span class="th">รอบสั่งของวัน${DOW_TH[boardDay]}</span><span class="line"></span><span class="pill">${list.length} สาขา</span></div>
+      ${list.length?`<div class="tblwrap"><table><thead><tr><th>รหัส</th><th>สาขา</th><th>ต้องสั่งภายใน</th><th>จะได้รับของวัน</th></tr></thead><tbody>
+        ${list.map(({b,s})=>`<tr><td class="small">${b.code}</td><td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td><td class="th"><b>≤ ${esc(s.cutoff)} น.</b></td><td class="th">${DOW_TH[s.deliver]}</td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty th">ไม่มีสาขาที่มีรอบสั่ง <b>${esc(L.label)}</b> ในวัน${DOW_TH[boardDay]}</div>`}`;
+  };
+  $$('#boardTabs .btab').forEach(t=>t.onclick=()=>{boardLine=t.dataset.line;$$('#boardTabs .btab').forEach(x=>x.classList.toggle('active',x.dataset.line===boardLine));drawBody();});
+  $$('#boardDays .dchip').forEach(t=>t.onclick=()=>{boardDay=+t.dataset.day;$$('#boardDays .dchip').forEach(x=>x.classList.toggle('active',+x.dataset.day===boardDay));drawBody();});
+  drawBody();
+}
+
+let calY, calM;
+function renderCalendar(main,u){
+  const isAdmin=u.role==='admin';
+  const now=new Date();
+  if(calY==null){calY=now.getFullYear();calM=now.getMonth()}
+  main.innerHTML=`
+    <div class="pagehead">
+      <div><div class="kicker">ปฏิทินการดำเนินงาน</div><h1>วันหยุด &amp; รอบจัดส่งเฉพาะกิจ</h1></div>
+      <div class="row">
+        <button class="btn ghost sm" id="prevM">‹ เดือนก่อน</button>
+        <div class="pill" id="calLabel"></div>
+        <button class="btn ghost sm" id="nextM">เดือนถัดไป ›</button>
+      </div>
+    </div>
+    ${isAdmin?'<div class="banner th small">คลิกที่ช่องวันเพื่อ<strong>ตั้ง/ยกเลิกวันหยุด</strong> — สาขาที่ได้รับผลกระทบจะแสดงทางด้านขวา</div>':'<div class="banner th small">วันหยุดที่แอดมินกำหนด — สาขาที่ได้รับผลกระทบอยู่ด้านขวา</div>'}
+    <div class="card" style="padding:.9rem"><div id="calGrid"></div></div>`;
+  $('#prevM').onclick=()=>{calM--;if(calM<0){calM=11;calY--}drawCal(u)};
+  $('#nextM').onclick=()=>{calM++;if(calM>11){calM=0;calY++}drawCal(u)};
+  drawCal(u);
+}
+function drawCal(u){
+  const isAdmin=u.role==='admin';
+  $('#calLabel').textContent=new Date(calY,calM,1).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+  const first=new Date(calY,calM,1); const startMon=jsDowToMon(first.getDay());
+  const daysInM=new Date(calY,calM+1,0).getDate();
+  let cells='';
+  DOW_TH.forEach(d=>cells+=`<div class="dow">${d}</div>`);
+  for(let i=0;i<startMon;i++)cells+=`<div class="cell out"></div>`;
+  const tISO=todayISO();
+  for(let d=1;d<=daysInM;d++){
+    const iso=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const hol=DB.holidays.find(h=>h.date===iso);
+    cells+=`<div class="cell ${hol?'holiday':''} ${iso===tISO?'today':''}" data-date="${iso}">
+      <div class="dnum">${d}</div>
+      ${hol?`<div class="hbadge">●</div><div class="hname th">${esc(hol.name||'วันหยุด')}</div>`:''}
+    </div>`;
+  }
+  $('#calGrid').innerHTML=`<div class="calgrid">${cells}</div>`;
+  if(isAdmin){$$('#calGrid .cell[data-date]').forEach(c=>c.onclick=()=>toggleHoliday(c.dataset.date,u))}
+  drawAffected(u);
+}
+function toggleHoliday(iso,u){ holidayModal(iso,u); }
+function holidayModal(iso,u){
+  const existing=DB.holidays.find(h=>h.date===iso);
+  const dow=jsDowToMon(new Date(iso+'T00:00:00').getDay());
+  openModal(`<div class="modal" style="max-width:460px"><button class="x" onclick="closeModal()">×</button>
+    <h2>${existing?'แก้ไขวันหยุด':'ตั้งวันหยุด'}</h2>
+    <div class="small muted th" style="margin-bottom:1rem">${fmtDate(iso)} · วัน${DOW_TH[dow]}</div>
+    <div class="field"><label>ชื่อวันหยุด / เหตุผล</label><input id="hname" value="${esc(existing?existing.name:'')}" placeholder="เช่น วันสงกรานต์, ปิดปรับปรุง"></div>
+    <div class="row" style="justify-content:space-between;margin-top:.6rem">
+      <div>${existing?`<button class="btn danger sm" id="hdel">ลบวันหยุด</button>`:''}</div>
+      <div class="row"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="hsave">${existing?'บันทึก':'ตั้งวันหยุด'}</button></div>
+    </div></div>`);
+  const inp=$('#hname'); if(inp){inp.focus(); inp.onkeydown=e=>{if(e.key==='Enter')$('#hsave').click()}}
+  $('#hsave').onclick=()=>{
+    const name=$('#hname').value.trim()||'วันหยุด';
+    if(existing){existing.name=name}else{DB.holidays.push({date:iso,name})}
+    saveDB();closeModal();drawCal(u);toast(existing?'บันทึกวันหยุดแล้ว':'เพิ่มวันหยุดแล้ว');
+  };
+  const hd=$('#hdel'); if(hd)hd.onclick=()=>{DB.holidays=DB.holidays.filter(h=>h.date!==iso);DB.specials=DB.specials.filter(s=>s.date!==iso);saveDB();closeModal();drawCal(u);toast('ยกเลิกวันหยุดแล้ว')};
+}
+function affectedLines(){
+  return [...WAREHOUSES.map(w=>({key:w,label:w,cat:'dry'})),
+          ...FRESH_TYPES.map(f=>({key:f,label:f,cat:'fresh'}))];
+}
+function branchAffectedByLine(b,L,dow){
+  return (b.rounds||[]).some(r=>lineMatch(r,L)&&roundDeliverDays(r).includes(dow));
+}
+function drawAffected(u){
+  const isAdmin=u.role==='admin';
+  const box=$('#affected');
+  const hols=DB.holidays.filter(h=>sameMonth(h.date,calY,calM)).sort((a,b)=>a.date<b.date?-1:1);
+  if(!hols.length){box.innerHTML=`<div class="card"><div class="empty th">ยังไม่มีวันหยุดในเดือนนี้</div></div>`;return}
+  const scope=visibleBranches(u);
+  const LINES=affectedLines();
+  let html='';
+  hols.forEach(h=>{
+    const dow=jsDowToMon(new Date(h.date+'T00:00:00').getDay());
+    const affectedAny=scope.filter(b=>(b.rounds||[]).some(r=>roundDeliverDays(r).includes(dow)));
+    html+=`<div class="card">
+      <div class="grouphead"><span style="color:var(--bad)">⚠</span> ${fmtDate(h.date)} · <span class="th">${esc(h.name)}</span> <span class="muted small th">(วัน${DOW_TH[dow]})</span><span class="line"></span><span class="pill">${affectedAny.length} สาขากระทบ</span></div>
+      <p class="small muted th" style="margin:.3rem 0 .5rem">แยกตามประเภทสินค้า — กดที่แต่ละประเภทเพื่อดูรายชื่อสาขาและกำหนดรอบจัดส่งเฉพาะกิจ</p>`;
+    let opened=false;
+    LINES.forEach((L)=>{
+      const branches=scope.filter(b=>branchAffectedByLine(b,L,dow));
+      const isEmpty=!branches.length;
+      const openAttr=(!isEmpty&&!opened)?'open':''; if(!isEmpty&&!opened)opened=true;
+      html+=`<details class="linegroup${isEmpty?' isempty':''}" ${openAttr}><summary><span class="tag ${L.cat}">${esc(L.label)}</span><span class="th small muted">${isEmpty?'ไม่กระทบ':(branches.length+' สาขากระทบ')}</span></summary>`;
+      if(isEmpty){
+        html+=`<div class="empty th small" style="border:0;margin:.35rem .5rem">— ไม่มีสาขากระทบในวันนี้ (สินค้านี้ไม่มีรอบส่งวัน${DOW_TH[dow]}) —</div>`;
+      }else{
+        html+=`<div class="tblwrap"><table><thead><tr><th>รหัส</th><th>สาขา</th><th>รอบจัดส่งเฉพาะกิจ (เลื่อนเป็น)</th><th>หมายเหตุ</th></tr></thead><tbody>`;
+        branches.forEach(b=>{
+          const sp=DB.specials.find(s=>s.date===h.date&&s.branch===b.code&&s.line===L.key)||{};
+          html+=`<tr>
+            <td class="small">${b.code}</td>
+            <td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td>
+            <td>${isAdmin?`<input type="date" data-sp-date="${h.date}" data-sp-branch="${b.code}" data-sp-line="${esc(L.key)}" value="${sp.newDate||''}" style="padding:.3em">`:`<span class="th">${sp.newDate?fmtDate(sp.newDate):'—'}</span>`}</td>
+            <td>${isAdmin?`<input type="text" data-note-date="${h.date}" data-note-branch="${b.code}" data-note-line="${esc(L.key)}" value="${esc(sp.note||'')}" placeholder="หมายเหตุ" style="padding:.3em;width:100%">`:`<span class="th small">${esc(sp.note||'—')}</span>`}</td>
+          </tr>`;
+        });
+        html+=`</tbody></table></div>`;
+      }
+      html+=`</details>`;
+    });
+    html+=`</div>`;
+  });
+  box.innerHTML=html;
+  if(isAdmin){
+    $$('#affected input[data-sp-date]').forEach(inp=>inp.onchange=()=>saveSpecial(inp.dataset.spDate,inp.dataset.spBranch,inp.dataset.spLine,{newDate:inp.value}));
+    $$('#affected input[data-note-date]').forEach(inp=>inp.onchange=()=>saveSpecial(inp.dataset.noteDate,inp.dataset.noteBranch,inp.dataset.noteLine,{note:inp.value}));
+  }
+}
+function saveSpecial(date,branch,line,patch){
+  let s=DB.specials.find(x=>x.date===date&&x.branch===branch&&x.line===line);
+  if(!s){s={date,branch,line,newDate:'',note:''};DB.specials.push(s)}
+  Object.assign(s,patch);saveDB();toast('บันทึกรอบเฉพาะกิจแล้ว');
+}
+
+/* ============================================================
+   BRANCH LIST + ค้นหา + เพิ่มสาขา
+   ============================================================ */
+function renderBranchList(main,u){
+  const isAdmin=u.role==='admin';
+  main.innerHTML=`
+    <div class="pagehead">
+      <div><div class="kicker">ทะเบียนสาขา</div><h1>สาขาทั้งหมด</h1></div>
+      ${isAdmin?`<button class="btn gold" id="addBranch">+ เพิ่มสาขาใหม่</button>`:''}
+    </div>
+    <div class="card">
+      <div class="field" style="margin:0"><input id="bsearch" placeholder="ค้นหาด้วยรหัสสาขา / ชื่อไทย / ชื่ออังกฤษ..."></div>
+    </div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table id="btbl">
+      <thead><tr><th>รหัส</th><th>ชื่อสาขา</th><th>ประเภท</th><th>AM</th><th style="text-align:right">รอบสั่ง–ส่ง</th></tr></thead>
+      <tbody></tbody></table></div></div>`;
+  const draw=(term='')=>{
+    term=term.trim().toLowerCase();
+    const list=visibleBranches(u).filter(b=>!term||b.code.toLowerCase().includes(term)||b.nameEn.toLowerCase().includes(term)||(b.nameTh||'').toLowerCase().includes(term));
+    $('#btbl tbody').innerHTML=list.length?list.map(b=>{
+      return `<tr data-brow="${b.code}">
+        <td class="small">${b.code}</td>
+        <td><a href="#/branch/${b.code}"><b class="th">${esc(b.nameEn)}</b></a>${b.nameTh?`<div class="small muted th">${esc(b.nameTh)}</div>`:''}</td>
+        <td>${b.type?`<span class="tag ${b.type.toLowerCase()}">${b.type}</span>`:'<span class="muted small">—</span>'}</td>
+        <td class="small th">${esc(b.am||'—')}</td>
+        <td style="text-align:right;white-space:nowrap">
+          ${canEditBranch(u,b.code)?`<button class="expander gear" data-cfg="${b.code}" title="ตั้งค่ารอบสั่ง–ส่ง">⚙</button>`:''}
+          <button class="expander" data-exp="${b.code}" aria-expanded="false" title="ดูรอบสั่ง–รอบส่ง">▾</button>
+        </td>
+      </tr>`;
+    }).join(''):`<tr><td colspan="5" class="empty th" style="border:0">ไม่พบสาขาที่ตรงกับ "${esc(term)}"</td></tr>`;
+    $$('#btbl [data-exp]').forEach(btn=>btn.onclick=()=>toggleExp(btn));
+    $$('#btbl [data-cfg]').forEach(btn=>btn.onclick=()=>{
+      const b=branchByCode(btn.dataset.cfg);
+      branchRoundsModal(b,()=>{const eb=document.querySelector(`[data-exp="${b.code}"]`);if(eb&&eb.getAttribute('aria-expanded')==='true'){eb.click();eb.click();}});
+    });
+  };
+  draw();
+  $('#bsearch').oninput=e=>draw(e.target.value);
+  if(isAdmin)$('#addBranch').onclick=()=>editBranchModal(null,u);
+}
+function toggleExp(btn){
+  const row=btn.closest('tr');
+  const open=btn.getAttribute('aria-expanded')==='true';
+  const next=row.nextElementSibling;
+  if(open){if(next&&next.classList.contains('exprow'))next.remove();btn.setAttribute('aria-expanded','false');btn.classList.remove('open');return}
+  // close any other open row (accordion-style, optional: keep single open)
+  const b=branchByCode(btn.dataset.exp);
+  const tr=document.createElement('tr');tr.className='exprow';
+  tr.innerHTML=`<td colspan="5" style="padding:0;background:#faf9f6"><div style="padding:.7rem 1rem 1rem">${roundsMini(b)}</div></td>`;
+  row.after(tr);
+  btn.setAttribute('aria-expanded','true');btn.classList.add('open');
+}
+function sortedRounds(b){
+  const order={WH001:1,WH002:2};
+  return (b.rounds||[]).slice().sort((x,y)=>{
+    if(x.category!==y.category)return x.category==='dry'?-1:1;
+    if(x.category==='dry')return (order[x.warehouse]||9)-(order[y.warehouse]||9);
+    return FRESH_TYPES.indexOf(x.freshType)-FRESH_TYPES.indexOf(y.freshType);
+  });
+}
+/* ตารางรอบสั่งรายสัปดาห์ จ.–อา. (แถว = สินค้า, คอลัมน์ = วัน) */
+function roundsWeekTable(b){
+  const rounds=sortedRounds(b);
+  if(!rounds.length)return '';
+  const head=`<tr><th style="text-align:left">สินค้า</th>${DOW_TH.map(d=>`<th style="text-align:center">${d}</th>`).join('')}</tr>`;
+  const body=rounds.map(r=>{
+    const label=r.category==='dry'?`<span class="tag dry">${esc(r.warehouse)}</span>`:`<span class="tag fresh">${esc(r.freshType)}</span>`;
+    const cells=DOW_TH.map((d,i)=>{
+      const s=slotForOrderDay(r,i);
+      return s?`<td class="wk-on"><b>≤${esc(s.cutoff)}</b><div class="wk-dl">รับ ${DOW_SHORT[s.deliver]}</div></td>`:`<td class="wk-off">—</td>`;
+    }).join('');
+    return `<tr><td class="wk-name">${label}<div class="wk-prod">${esc(r.product)}</div></td>${cells}</tr>`;
+  }).join('');
+  return `<div class="tblwrap"><table class="wktbl"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+  <div class="small muted th" style="margin-top:.45rem">วิธีอ่าน: ช่องวัน = <b>วันสั่ง</b> · <b>“≤เวลา”</b> = ต้องสั่งภายในเวลานั้น · <b>“รับ (วัน)”</b> = ได้รับของวันนั้น · <b>“—”</b> = วันนั้นไม่มีรอบสั่ง</div>`;
+}
+function roundsMini(b){
+  if(!(b.rounds||[]).length)return `<div class="empty th small" style="border:0">ยังไม่มีรอบสั่ง–ส่ง <a href="#/branch/${b.code}">เพิ่มที่หน้าสาขา ›</a></div>`;
+  return `<div class="grouphead" style="font-size:.72rem;margin:.2rem 0 .5rem">รอบสั่ง–รับของรายสัปดาห์ · <span class="th">${esc(b.nameEn)}</span><span class="line"></span><a href="#/branch/${b.code}" class="btn sm ghost">ดูหน้าสาขา ›</a></div>
+  ${roundsWeekTable(b)}`;
+}
+
+/* ============================================================
+   BRANCH DETAIL
+   ============================================================ */
+function renderBranchDetail(main,u,code){
+  const b=branchByCode(code);
+  if(!b||!canSeeBranch(u,code)){main.innerHTML=`<div class="card"><div class="empty th">ไม่พบสาขา หรือคุณไม่มีสิทธิ์เข้าถึงสาขานี้</div><div style="text-align:center;margin-top:1rem"><a href="#/branches" class="btn ghost">‹ ทุกสาขา</a></div></div>`;return}
+  const isAdmin=u.role==='admin';
+  const canEdit=isAdmin||(u.canEdit&&canSeeBranch(u,code));
+  main.innerHTML=`
+    <div class="pagehead">
+      <div><div class="kicker">${b.code}</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div>
+      <div class="row">
+        <a href="#/branches" class="btn ghost sm">‹ ทุกสาขา</a>
+        <button class="btn ghost sm" id="shareBtn">🔗 แชร์ลิงก์สาขา</button>
+        ${isAdmin?`<button class="btn ghost sm" id="histBtn">🕑 ประวัติ 1 ปี</button>`:''}
+        ${canEdit?`<button class="btn sm" id="editBranch">แก้ไขข้อมูลสาขา</button>`:''}
+      </div>
+    </div>
+    <div id="infoCard"></div>
+    <div id="roundsCard"></div>
+    <div id="ordersCard"></div>`;
+  drawBranchInfo(b);
+  drawRounds(b,canEdit);
+  drawOrders(b,u,{scope:'admin'});
+  $('#shareBtn').onclick=()=>shareModal(b);
+  if(isAdmin)$('#histBtn').onclick=()=>historyModal(b);
+  if(canEdit)$('#editBranch').onclick=()=>editBranchModal(b,u);
+}
+function infoRow(label,val,isLink){
+  return `<div style="padding:.4rem 0;border-bottom:1px solid var(--jc-border)"><div class="small muted head" style="font-size:.62rem">${label}</div><div class="th">${val?(isLink?`<a href="${esc(val)}" target="_blank" style="color:var(--jc-gold)">เปิดแผนที่ ↗</a>`:esc(val)):'<span class="muted">—</span>'}</div></div>`;
+}
+function drawBranchInfo(b){
+  $('#infoCard').innerHTML=`<div class="card">
+    <hr class="rule"><h2 style="font-size:1rem;margin-bottom:.6rem">ข้อมูลสาขา</h2>
+    <div class="grid3">
+      ${infoRow('ที่อยู่',b.address)}
+      ${infoRow('เบอร์โทรสาขา',b.phone)}
+      ${infoRow('AM ที่ดูแล',b.am)}
+      ${infoRow('บริษัทเจ้าของ',b.company)}
+      ${infoRow('ประเภท',b.type?`${b.type==='MT'?'MT (Modern Trade)':'FC (Franchise)'}`:'')}
+      ${infoRow('เปิดร้านตั้งแต่',b.openDate?fmtDate(b.openDate):'')}
+      ${infoRow('เงื่อนไขห้าง/เวลาเข้า',b.mallCondition)}
+      ${infoRow('พิกัดแผนที่',b.mapUrl,true)}
+    </div></div>`;
+}
+function drawRounds(b,canEdit){
+  const has=(b.rounds||[]).length;
+  $('#roundsCard').innerHTML=`<div class="card">
+    <div class="grouphead">รอบสั่ง–รับของ (รายสัปดาห์) <span class="line"></span>${canEdit?`<button class="btn sm ghost" id="addRoundItem">+ เพิ่มสินค้า/คลัง</button> <button class="btn sm gold" id="cfgRounds">⚙ ตั้งค่ารอบ</button>`:''}</div>
+    ${has?roundsWeekTable(b):`<div class="empty th">ยังไม่มีรอบ — กด “+ เพิ่มสินค้า/คลัง” เพื่อเริ่ม</div>`}</div>`;
+  if(canEdit){
+    $('#cfgRounds').onclick=()=>branchRoundsModal(b,()=>drawRounds(b,canEdit));
+    $('#addRoundItem').onclick=()=>branchRoundsModal(b,()=>drawRounds(b,canEdit),{addNew:true});
+  }
+}
+
+/* ----- ORDERS board (PO/TR) ----- */
+function drawOrders(b,u,opt){
+  opt=opt||{};
+  const canEdit=u.role==='admin'||(u.canEdit&&canSeeBranch(u,b.code));
+  const shareMode=opt.scope==='share';
+  let list=DB.orders.filter(o=>o.branch===b.code);
+  // share / viewer default: current month only (by order date)
+  if(shareMode){const n=new Date();list=list.filter(o=>sameMonth(o.orderDate,n.getFullYear(),n.getMonth()))}
+  list.sort((a,b)=>a.orderDate<b.orderDate?1:a.orderDate>b.orderDate?-1:0);
+  const dry=list.filter(o=>o.category==='dry');
+  const freshGroups=FRESH_TYPES.map(ft=>({ft,items:list.filter(o=>o.category==='fresh'&&o.freshType===ft)})).filter(g=>g.items.length);
+
+  const orderTable=(items)=>`<div class="tblwrap"><table>
+    <thead><tr><th>วันที่สั่ง</th><th>เลข TR/PO</th><th>คลัง/ชนิด</th><th>ชื่อสินค้า</th><th>วันที่ส่ง</th><th>สถานะ</th><th>หมายเหตุ</th>${canEdit&&!shareMode?'<th></th>':''}</tr></thead>
+    <tbody>${items.map(o=>{
+      const sm=statusMeta(o.status);
+      return `<tr>
+        <td class="small">${fmtDate(o.orderDate)}</td>
+        <td><b class="small">${esc(o.docType)}</b><div class="small muted">${esc(o.docNo)}</div></td>
+        <td class="small th">${o.category==='dry'?esc(o.warehouse):esc(o.freshType)}</td>
+        <td class="th">${esc(o.product)}</td>
+        <td class="small">${fmtDate(o.deliveryDate)}</td>
+        <td><span class="status ${sm.cls}" ${canEdit&&!shareMode?`data-cyc="${o.id}"`:''} title="${canEdit&&!shareMode?'คลิกเพื่อเปลี่ยนสถานะ':''}"><span class="dot ${sm.cls}"></span>${sm.label}</span></td>
+        <td class="small th muted">${esc(o.note||'—')}</td>
+        ${canEdit&&!shareMode?`<td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-edit-o="${o.id}">แก้</button><button class="btn sm ghost" data-del-o="${o.id}">ลบ</button></td>`:''}
+      </tr>`}).join('')}</tbody></table></div>`;
+
+  let html=`<div class="card"><div class="grouphead">ออเดอร์ที่สาขาสั่ง (PO / TR)`;
+  if(shareMode)html+=` <span class="pill">เฉพาะเดือนนี้</span>`;
+  html+=`<span class="line"></span>${canEdit&&!shareMode?`<button class="btn sm gold" id="addOrder">+ เพิ่มออเดอร์</button>`:''}</div>`;
+  if(!list.length){html+=`<div class="empty th">ยังไม่มีออเดอร์${shareMode?'ในเดือนนี้':''}</div>`}
+  else{
+    html+=`<div class="grouphead" style="font-size:.75rem"><span class="tag dry">ของแห้ง</span><span class="line"></span></div>`;
+    html+= dry.length?orderTable(dry):`<div class="empty th small">— ไม่มีรายการของแห้ง —</div>`;
+    freshGroups.forEach(g=>{
+      html+=`<div class="grouphead" style="font-size:.75rem"><span class="tag fresh">ของสด</span> <span class="th">${esc(g.ft)}</span><span class="line"></span></div>`+orderTable(g.items);
+    });
+    if(!freshGroups.length){html+=`<div class="grouphead" style="font-size:.75rem"><span class="tag fresh">ของสด</span><span class="line"></span></div><div class="empty th small">— ไม่มีรายการของสด —</div>`}
+  }
+  html+=`</div>`;
+  $('#ordersCard').innerHTML=html;
+
+  if(canEdit&&!shareMode){
+    const ab=$('#addOrder');if(ab)ab.onclick=()=>orderModal(b,null);
+    $$('#ordersCard [data-edit-o]').forEach(x=>x.onclick=()=>orderModal(b,DB.orders.find(o=>o.id===x.dataset.editO)));
+    $$('#ordersCard [data-del-o]').forEach(x=>x.onclick=()=>confirmDialog('ลบออเดอร์นี้?',()=>{DB.orders=DB.orders.filter(o=>o.id!==x.dataset.delO);saveDB();drawOrders(b,u,opt);toast('ลบแล้ว')},{danger:true,yes:'ลบ'}));
+    $$('#ordersCard [data-cyc]').forEach(x=>x.onclick=()=>{
+      const o=DB.orders.find(o=>o.id===x.dataset.cyc);
+      const order=['complete','cut','hold'];o.status=order[(order.indexOf(o.status)+1)%3];
+      if(o.status==='complete')o.note='';saveDB();drawOrders(b,u,opt);
+    });
+  }
+}
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+function openModal(html){$('#modal-root').innerHTML=`<div class="overlay">${html}</div>`;
+  $('#modal-root .overlay').onclick=e=>{if(e.target.classList.contains('overlay'))closeModal()};
+}
+function closeModal(){$('#modal-root').innerHTML=''}
+function confirmDialog(msg,onYes,opt){opt=opt||{};
+  openModal(`<div class="modal" style="max-width:420px"><h2 style="font-size:1rem">${esc(opt.title||'ยืนยัน')}</h2>
+    <p class="th" style="margin:.7rem 0 1.1rem">${esc(msg)}</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="cd_no">ยกเลิก</button><button class="btn ${opt.danger?'danger':'gold'}" id="cd_yes">${esc(opt.yes||'ยืนยัน')}</button></div></div>`);
+  $('#cd_no').onclick=closeModal; $('#cd_yes').onclick=()=>{closeModal();onYes()};
+}
+
+function editBranchModal(b,u){
+  const isNew=!b;
+  const nextCode='JC'+String(DB.branches.length+1).padStart(3,'0');
+  b=b||{code:nextCode,nameEn:'',nameTh:'',address:'',phone:'',am:'',company:'บริษัท เจี้ยนชา จำกัด',type:'',openDate:'',mallCondition:'',mapUrl:'',rounds:[]};
+  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+    <h2>${isNew?'เพิ่มสาขาใหม่':'แก้ไขข้อมูลสาขา'}</h2><div class="small muted" style="margin-bottom:1rem">${b.code}</div>
+    <div class="grid2">
+      <div class="field"><label>รหัสสาขา</label><input id="f_code" value="${esc(b.code)}" ${isNew?'':'readonly'}></div>
+      <div class="field"><label>ประเภท</label><select id="f_type"><option value="">—</option><option ${b.type==='MT'?'selected':''}>MT</option><option ${b.type==='FC'?'selected':''}>FC</option></select></div>
+      <div class="field"><label>ชื่อสาขา (อังกฤษ)</label><input id="f_en" value="${esc(b.nameEn)}"></div>
+      <div class="field"><label>ชื่อสาขา (ไทย)</label><input id="f_th" value="${esc(b.nameTh)}"></div>
+      <div class="field"><label>เบอร์โทรสาขา</label><input id="f_phone" value="${esc(b.phone)}"></div>
+      <div class="field"><label>AM ที่ดูแล</label><input id="f_am" value="${esc(b.am)}"></div>
+      <div class="field"><label>บริษัทเจ้าของ</label><input id="f_company" value="${esc(b.company)}"></div>
+      <div class="field"><label>เปิดร้านตั้งแต่</label><input id="f_open" type="date" value="${esc(b.openDate)}"></div>
+    </div>
+    <div class="field"><label>ที่อยู่</label><textarea id="f_addr" rows="2">${esc(b.address)}</textarea></div>
+    <div class="grid2">
+      <div class="field"><label>เงื่อนไขห้าง/เวลาเข้า</label><input id="f_mall" value="${esc(b.mallCondition)}"></div>
+      <div class="field"><label>ลิงก์พิกัดแผนที่</label><input id="f_map" value="${esc(b.mapUrl)}"></div>
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:.5rem">
+      ${!isNew&&u.role==='admin'?`<button class="btn danger sm" id="delBranch">ลบสาขา</button>`:''}
+      <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn gold" id="saveBranch">บันทึก</button>
+    </div></div>`);
+  $('#saveBranch').onclick=()=>{
+    const code=$('#f_code').value.trim();
+    if(!code||!$('#f_en').value.trim()){toast('กรุณากรอกรหัสและชื่อสาขา');return}
+    if(isNew&&branchByCode(code)){toast('รหัสสาขานี้มีอยู่แล้ว');return}
+    Object.assign(b,{code,nameEn:$('#f_en').value.trim(),nameTh:$('#f_th').value.trim(),type:$('#f_type').value,
+      phone:$('#f_phone').value.trim(),am:$('#f_am').value.trim(),company:$('#f_company').value.trim(),
+      openDate:$('#f_open').value,address:$('#f_addr').value.trim(),mallCondition:$('#f_mall').value.trim(),mapUrl:$('#f_map').value.trim()});
+    if(isNew)DB.branches.push(b);
+    saveDB();closeModal();render();toast(isNew?'เพิ่มสาขาแล้ว':'บันทึกแล้ว');
+  };
+  const db=$('#delBranch');if(db)db.onclick=()=>confirmDialog(`ลบสาขา ${b.nameEn} และออเดอร์ทั้งหมดของสาขานี้?`,()=>{DB.branches=DB.branches.filter(x=>x.code!==b.code);DB.orders=DB.orders.filter(o=>o.branch!==b.code);saveDB();closeModal();go('/branches');render();toast('ลบสาขาแล้ว')},{danger:true,yes:'ลบสาขา'});
+}
+
+function roundModal(b){
+  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+    <h2>เพิ่มรอบสั่ง–รอบส่ง</h2><div style="height:.6rem"></div>
+    <div class="grid2">
+      <div class="field"><label>ประเภทสินค้า</label><select id="r_cat"><option value="dry">ของแห้ง</option><option value="fresh">ของสด</option></select></div>
+      <div class="field" id="r_sub"></div>
+    </div>
+    <div class="field"><label>ชื่อสินค้า/หมวด</label><input id="r_prod" placeholder="เช่น นมสดมาลี, ของแห้งทั่วไป"></div>
+    <div class="grid2">
+      <div class="field"><label>รอบสั่ง</label><input id="r_rule" placeholder="เช่น สั่งก่อน 12.00 น. วันก่อนส่ง"></div>
+      <div class="field"><label>เงื่อนไขเวลา</label><input id="r_cond" placeholder="เช่น Cut off 12.00 น."></div>
+    </div>
+    <div class="field"><label>วันจัดส่ง</label><div class="row" id="r_days">${DOW_TH.map((d,i)=>`<label class="chip"><input type="checkbox" value="${i}"> ${d}</label>`).join('')}</div></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="r_save">เพิ่ม</button></div></div>`);
+  const drawSub=()=>{const cat=$('#r_cat').value;$('#r_sub').innerHTML=cat==='dry'
+    ?`<label>คลัง</label><select id="r_wh">${WAREHOUSES.map(w=>`<option>${w}</option>`).join('')}</select>`
+    :`<label>ชนิดของสด</label><select id="r_ft">${FRESH_TYPES.map(f=>`<option>${f}</option>`).join('')}</select>`};
+  $('#r_cat').onchange=drawSub;drawSub();
+  $('#r_save').onclick=()=>{
+    const cat=$('#r_cat').value;
+    const days=$$('#r_days input:checked').map(x=>+x.value);
+    if(!$('#r_prod').value.trim()||!days.length){toast('กรอกชื่อสินค้าและเลือกวันจัดส่ง');return}
+    b.rounds.push({id:uid('r'),category:cat,warehouse:cat==='dry'?$('#r_wh').value:'',freshType:cat==='fresh'?$('#r_ft').value:'',
+      product:$('#r_prod').value.trim(),orderRule:$('#r_rule').value.trim(),condition:$('#r_cond').value.trim(),deliveryDays:days});
+    saveDB();closeModal();drawRounds(b,true);toast('เพิ่มรอบแล้ว');
+  };
+}
+
+function branchRoundsModal(b,onSaved,opts){opts=opts||{};
+  const daySel=(cls,val)=>`<select class="${cls}" style="padding:.3em">${DOW_TH.map((d,i)=>`<option value="${i}" ${i===val?'selected':''}>${d}</option>`).join('')}</select>`;
+  const slotRowHTML=(s)=>{s=s||{order:0,cutoff:'12:00',deliver:1};
+    return `<div class="slotrow" style="display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;margin:.25rem 0;padding:.3rem .4rem;background:#fff;border:1px solid var(--jc-border);border-radius:2px">
+      <span class="small muted th">สั่งวัน</span>${daySel('sl-order',s.order)}
+      <span class="small muted th">ภายใน</span><input type="time" class="sl-cut" value="${esc(s.cutoff||'12:00')}" style="width:105px;padding:.3em">
+      <span class="small muted th">→ รับวัน</span>${daySel('sl-deliver',s.deliver)}
+      <button class="btn sm ghost sl-del" title="ลบรอบสั่งนี้" style="margin-left:auto">✕</button>
+    </div>`;};
+  const rowHTML=(r)=>{
+    r=r||{category:'fresh',warehouse:'WH001',freshType:'นมสด',product:'',slots:[{order:0,cutoff:'12:00',deliver:1}]};
+    return `<div class="rndrow" style="border:1px solid var(--jc-border);border-radius:2px;padding:.75rem .85rem;margin-bottom:.7rem;background:#faf9f6">
+      <div class="grid3">
+        <div class="field"><label>ประเภท</label><select class="rr-cat">
+          <option value="dry" ${r.category==='dry'?'selected':''}>ของแห้ง</option>
+          <option value="fresh" ${r.category==='fresh'?'selected':''}>ของสด</option></select></div>
+        <div class="field rr-whwrap"><label>คลัง</label><select class="rr-wh">${WAREHOUSES.map(w=>`<option ${r.warehouse===w?'selected':''}>${w}</option>`).join('')}</select></div>
+        <div class="field rr-ftwrap"><label>ชนิดของสด</label><select class="rr-ft">${FRESH_TYPES.map(f=>`<option ${r.freshType===f?'selected':''}>${f}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>ชื่อสินค้า</label><input class="rr-prod" value="${esc(r.product)}" placeholder="เช่น นมสดมาลี / เมจิ"></div>
+      <div class="field"><label>รอบสั่ง — สั่งวันไหน ภายในกี่โมง รับของวันไหน</label>
+        <div class="sl-list">${(r.slots||[]).map(slotRowHTML).join('')}</div>
+        <button class="btn sm ghost sl-add" style="margin-top:.3rem">+ เพิ่มรอบสั่ง (อีกวัน)</button>
+      </div>
+      <div class="row" style="justify-content:flex-end"><button class="btn danger sm rr-del">ลบสินค้านี้</button></div>
+    </div>`;
+  };
+  openModal(`<div class="modal" style="max-width:720px"><button class="x" onclick="closeModal()">×</button>
+    <h2>ตั้งค่ารอบสั่ง–รับของ</h2><div class="small muted th" style="margin-bottom:.2rem">${esc(b.nameEn)} · ${b.code}</div>
+    <p class="small muted th" style="margin:.2rem 0 1rem">แต่ละสินค้า กำหนดได้ว่า <b>สั่งวันไหน · ภายในกี่โมง · รับของวันไหน</b> (เพิ่มได้หลายวันต่อสัปดาห์)</p>
+    <div id="rrList">${(b.rounds||[]).map(rowHTML).join('')}</div>
+    <button class="btn ghost sm" id="rrAdd" style="margin-bottom:1rem">+ เพิ่มสินค้า</button>
+    <div class="row" style="justify-content:flex-end;border-top:1px solid var(--jc-border);padding-top:.9rem">
+      <button class="btn ghost" onclick="closeModal()">ยกเลิก</button>
+      <button class="btn gold" id="rrSave">บันทึกทั้งหมด</button>
+    </div></div>`);
+  const wireSlot=(sr)=>{ sr.querySelector('.sl-del').onclick=()=>sr.remove(); };
+  const wireRow=(el)=>{
+    const sync=()=>{const dry=el.querySelector('.rr-cat').value==='dry';
+      el.querySelector('.rr-whwrap').style.display=dry?'':'none';
+      el.querySelector('.rr-ftwrap').style.display=dry?'none':'';};
+    el.querySelector('.rr-cat').onchange=sync;sync();
+    el.querySelector('.rr-del').onclick=()=>el.remove();
+    el.querySelectorAll('.slotrow').forEach(wireSlot);
+    el.querySelector('.sl-add').onclick=()=>{const t=document.createElement('div');t.innerHTML=slotRowHTML();const sr=t.firstElementChild;el.querySelector('.sl-list').appendChild(sr);wireSlot(sr);};
+  };
+  $$('#rrList .rndrow').forEach(wireRow);
+  $('#rrAdd').onclick=()=>{const t=document.createElement('div');t.innerHTML=rowHTML();const el=t.firstElementChild;$('#rrList').appendChild(el);wireRow(el);el.scrollIntoView({block:'center'});el.querySelector('.rr-prod').focus();};
+  if(opts.addNew)$('#rrAdd').click();
+  $('#rrSave').onclick=()=>{
+    const rounds=[];
+    $$('#rrList .rndrow').forEach(el=>{
+      const cat=el.querySelector('.rr-cat').value;
+      const prod=el.querySelector('.rr-prod').value.trim();
+      if(!prod)return;
+      const slots=[...el.querySelectorAll('.slotrow')].map(sr=>({
+        order:+sr.querySelector('.sl-order').value,
+        cutoff:sr.querySelector('.sl-cut').value||'12:00',
+        deliver:+sr.querySelector('.sl-deliver').value}));
+      rounds.push({id:uid('r'),category:cat,
+        warehouse:cat==='dry'?el.querySelector('.rr-wh').value:'',
+        freshType:cat==='fresh'?el.querySelector('.rr-ft').value:'',
+        product:prod,slots});
+    });
+    b.rounds=rounds;saveDB();closeModal();toast('บันทึกรอบสั่ง–รับของแล้ว');if(onSaved)onSaved();
+  };
+}
+
+function orderModal(b,o){
+  const isNew=!o;
+  o=o||{id:uid('o'),branch:b.code,orderDate:todayISO(),docType:'PO',docNo:'',category:'dry',warehouse:'WH001',freshType:'นมสด',product:'',deliveryDate:todayISO(),status:'complete',note:''};
+  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+    <h2>${isNew?'เพิ่มออเดอร์':'แก้ไขออเดอร์'}</h2><div class="small muted" style="margin-bottom:.6rem">${esc(b.nameEn)}</div>
+    <div class="grid2">
+      <div class="field"><label>ประเภทเอกสาร</label><select id="o_dt"><option ${o.docType==='PO'?'selected':''}>PO</option><option ${o.docType==='TR'?'selected':''}>TR</option></select></div>
+      <div class="field"><label>เลขที่ TR/PO</label><input id="o_dn" value="${esc(o.docNo)}" placeholder="เช่น PO-6808-0451"></div>
+      <div class="field"><label>ประเภทสินค้า</label><select id="o_cat"><option value="dry" ${o.category==='dry'?'selected':''}>ของแห้ง</option><option value="fresh" ${o.category==='fresh'?'selected':''}>ของสด</option></select></div>
+      <div class="field" id="o_sub"></div>
+      <div class="field"><label>วันที่สั่ง</label><input id="o_od" type="date" value="${esc(o.orderDate)}"></div>
+      <div class="field"><label>วันที่ส่ง</label><input id="o_dd" type="date" value="${esc(o.deliveryDate)}"></div>
+    </div>
+    <div class="field"><label>ชื่อสินค้า</label><input id="o_prod" value="${esc(o.product)}"></div>
+    <div class="field"><label>สถานะ</label><select id="o_st">
+      <option value="complete" ${o.status==='complete'?'selected':''}>🟢 Complete · ได้รับครบ</option>
+      <option value="cut" ${o.status==='cut'?'selected':''}>🔴 โดนตัด / ส่งไม่ครบ</option>
+      <option value="hold" ${o.status==='hold'?'selected':''}>🟡 รอชำระเงิน (Hold)</option>
+    </select></div>
+    <div class="field" id="o_notew"><label>หมายเหตุ</label><input id="o_note" value="${esc(o.note)}" placeholder="ระบุเหตุผลที่ถูกตัด/ส่งไม่ครบ"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="o_save">บันทึก</button></div></div>`);
+  const drawSub=()=>{const cat=$('#o_cat').value;$('#o_sub').innerHTML=cat==='dry'
+    ?`<label>คลัง</label><select id="o_wh">${WAREHOUSES.map(w=>`<option ${o.warehouse===w?'selected':''}>${w}</option>`).join('')}</select>`
+    :`<label>ชนิดของสด</label><select id="o_ft">${FRESH_TYPES.map(f=>`<option ${o.freshType===f?'selected':''}>${f}</option>`).join('')}</select>`};
+  $('#o_cat').onchange=drawSub;drawSub();
+  const noteVis=()=>{$('#o_notew').style.display=$('#o_st').value==='complete'?'none':''};
+  $('#o_st').onchange=noteVis;noteVis();
+  $('#o_save').onclick=()=>{
+    const cat=$('#o_cat').value;
+    Object.assign(o,{docType:$('#o_dt').value,docNo:$('#o_dn').value.trim(),category:cat,
+      warehouse:cat==='dry'?$('#o_wh').value:'',freshType:cat==='fresh'?$('#o_ft').value:'',
+      product:$('#o_prod').value.trim(),orderDate:$('#o_od').value,deliveryDate:$('#o_dd').value,
+      status:$('#o_st').value,note:$('#o_st').value==='complete'?'':$('#o_note').value.trim()});
+    if(!o.product){toast('กรอกชื่อสินค้า');return}
+    if(isNew){o.createdAt=todayISO();DB.orders.push(o)}
+    saveDB();closeModal();drawOrders(b,curUser(),{scope:'admin'});toast('บันทึกออเดอร์แล้ว');
+  };
+}
+
+function shareModal(b){
+  const base=location.origin+location.pathname;
+  const link=`${base}?branch=${encodeURIComponent(b.code)}`;
+  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+    <h2>แชร์ลิงก์สาขา</h2>
+    <p class="th small muted">ผู้ที่เปิดลิงก์นี้จะเห็น<strong>เฉพาะข้อมูลสาขา ${esc(b.nameEn)}</strong> และเห็นออเดอร์ PO/TR <strong>เฉพาะเดือนปัจจุบัน</strong> (นับจากวันที่สั่ง) โดยไม่เห็นสาขาอื่นและแก้ไขไม่ได้</p>
+    <div class="field"><label>ลิงก์แชร์</label><input id="shareLink" value="${esc(link)}" readonly></div>
+    <div class="banner th small">หมายเหตุ (ต้นแบบ): ลิงก์ทำงานบนเบราว์เซอร์ที่มีข้อมูลนี้อยู่ เมื่อขึ้นระบบหลังบ้านจริง ลิงก์จะเปิดได้จากทุกอุปกรณ์</div>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost" id="openShare">เปิดดูตัวอย่าง</button>
+      <button class="btn gold" id="copyShare">คัดลอกลิงก์</button>
+    </div></div>`);
+  $('#copyShare').onclick=()=>{const i=$('#shareLink');i.select();navigator.clipboard?.writeText(i.value);toast('คัดลอกลิงก์แล้ว')};
+  $('#openShare').onclick=()=>window.open(link,'_blank');
+}
+
+function historyModal(b){
+  const yearAgo=addDays(todayISO(),-365);
+  const list=DB.orders.filter(o=>o.branch===b.code&&o.orderDate>=yearAgo).sort((a,b)=>a.orderDate<b.orderDate?1:-1);
+  openModal(`<div class="modal" style="max-width:820px"><button class="x" onclick="closeModal()">×</button>
+    <h2>ประวัติการสั่ง 1 ปี</h2><div class="small muted th" style="margin-bottom:.6rem">${esc(b.nameEn)} · ${list.length} รายการ (ตั้งแต่ ${fmtDate(yearAgo)})</div>
+    <div class="tblwrap" style="max-height:60vh;overflow:auto"><table><thead><tr><th>วันที่สั่ง</th><th>TR/PO</th><th>ประเภท</th><th>สินค้า</th><th>วันส่ง</th><th>สถานะ</th></tr></thead>
+    <tbody>${list.map(o=>{const sm=statusMeta(o.status);return `<tr><td class="small">${fmtDate(o.orderDate)}</td><td class="small">${esc(o.docType)} ${esc(o.docNo)}</td><td class="small th">${o.category==='dry'?'ของแห้ง '+esc(o.warehouse):'ของสด '+esc(o.freshType)}</td><td class="th">${esc(o.product)}</td><td class="small">${fmtDate(o.deliveryDate)}</td><td><span class="status ${sm.cls}"><span class="dot ${sm.cls}"></span>${sm.label}</span></td></tr>`}).join('')||`<tr><td colspan="6" class="empty th" style="border:0">ไม่มีข้อมูล</td></tr>`}</tbody></table></div>
+    <div class="row" style="justify-content:flex-end;margin-top:.6rem"><button class="btn gold" onclick="closeModal()">ปิด</button></div></div>`);
+}
+
+/* ============================================================
+   USERS / สิทธิ์ผู้ใช้ (admin only)
+   ============================================================ */
+function renderUsers(main,u){
+  if(u.role!=='admin'){main.innerHTML=`<div class="card"><div class="empty th">เฉพาะแอดมินเท่านั้น</div></div>`;return}
+  main.innerHTML=`
+    <div class="pagehead"><div><div class="kicker">การจัดการสิทธิ์</div><h1>ผู้ใช้ &amp; สิทธิ์เข้าถึง</h1></div>
+      <button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button></div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table>
+      <thead><tr><th>ชื่อ</th><th>ชื่อผู้ใช้</th><th>บทบาท</th><th>สิทธิ์แก้ไข</th><th>สาขาที่เข้าถึง</th><th></th></tr></thead>
+      <tbody>${DB.users.map(x=>`<tr>
+        <td class="th">${esc(x.name)}</td><td class="small">${esc(x.username)}</td>
+        <td><span class="pill">${roleLabel(x.role)}</span></td>
+        <td class="small">${x.canEdit?'✓ แก้ไขได้':'— อ่านอย่างเดียว'}</td>
+        <td class="small th">${x.scope==='all'?'<b>ทุกสาขา</b>':(x.scope||[]).length+' สาขา'}</td>
+        <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button>${x.username!=='admin'?`<button class="btn sm ghost" data-du="${x.id}">ลบ</button>`:''}</td>
+      </tr>`).join('')}</tbody></table></div></div>`;
+  $('#addUser').onclick=()=>userModal(null);
+  $$('[data-eu]').forEach(x=>x.onclick=()=>userModal(DB.users.find(u=>u.id===x.dataset.eu)));
+  $$('[data-du]').forEach(x=>x.onclick=()=>confirmDialog('ลบผู้ใช้นี้?',()=>{DB.users=DB.users.filter(u=>u.id!==x.dataset.du);saveDB();render();toast('ลบผู้ใช้แล้ว')},{danger:true,yes:'ลบ'}));
+}
+function userModal(x){
+  const isNew=!x;
+  x=x||{id:uid('u'),name:'',username:'',password:'1234',role:'viewer',scope:[],canEdit:false};
+  const scopeAll=x.scope==='all';
+  openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
+    <h2>${isNew?'เพิ่มผู้ใช้':'แก้ไขผู้ใช้'}</h2><div style="height:.6rem"></div>
+    <div class="grid2">
+      <div class="field"><label>ชื่อ–สกุล</label><input id="u_name" value="${esc(x.name)}"></div>
+      <div class="field"><label>ชื่อผู้ใช้ (login)</label><input id="u_un" value="${esc(x.username)}" ${x.username==='admin'?'readonly':''}></div>
+      <div class="field"><label>รหัสผ่าน</label><input id="u_pw" value="${esc(x.password)}"></div>
+      <div class="field"><label>บทบาท</label><select id="u_role">
+        <option value="admin" ${x.role==='admin'?'selected':''}>แอดมิน (ทุกสิทธิ์)</option>
+        <option value="editor" ${x.role==='editor'?'selected':''}>ผู้แก้ไข</option>
+        <option value="viewer" ${x.role==='viewer'?'selected':''}>ผู้ชม</option>
+      </select></div>
+    </div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_edit" ${x.canEdit?'checked':''}> อนุญาตให้แก้ไขข้อมูล/ออเดอร์</label></div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_all" ${scopeAll?'checked':''}> เข้าถึงทุกสาขา</label></div>
+    <div class="field" id="u_scopewrap"><label>เลือกสาขาที่เข้าถึงได้</label>
+      <div class="scopebox">${DB.branches.map(b=>`<label><input type="checkbox" class="u_sc" value="${b.code}" ${Array.isArray(x.scope)&&x.scope.includes(b.code)?'checked':''}> <span class="small">${b.code}</span> · ${esc(b.nameEn)}</label>`).join('')}</div>
+    </div>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="u_save">บันทึก</button></div></div>`);
+  const syncScope=()=>{$('#u_scopewrap').style.display=($('#u_all').checked||$('#u_role').value==='admin')?'none':''};
+  $('#u_all').onchange=syncScope;$('#u_role').onchange=syncScope;syncScope();
+  $('#u_save').onclick=()=>{
+    const role=$('#u_role').value;
+    const all=$('#u_all').checked||role==='admin';
+    Object.assign(x,{name:$('#u_name').value.trim(),username:$('#u_un').value.trim(),password:$('#u_pw').value,
+      role,canEdit:role==='admin'?true:$('#u_edit').checked,
+      scope:all?'all':$$('.u_sc:checked').map(i=>i.value)});
+    if(!x.name||!x.username){toast('กรอกชื่อและ username');return}
+    if(isNew&&DB.users.some(u=>u.username===x.username)){toast('username นี้มีอยู่แล้ว');return}
+    if(isNew)DB.users.push(x);
+    saveDB();closeModal();render();toast('บันทึกผู้ใช้แล้ว');
+  };
+}
+
+/* ============================================================
+   SHARE VIEW (public, single branch, current month)
+   ============================================================ */
+function renderShare(code){
+  const b=branchByCode(code);
+  const app=$('#app');
+  if(!b){app.innerHTML=`<div class="wrap"><div class="card"><div class="empty th">ไม่พบสาขา หรือลิงก์ไม่ถูกต้อง</div></div></div>`;return}
+  app.innerHTML=`
+    <div class="topbar"><div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ROUNDS · แชร์</small></div></div>
+      <div class="spacer"></div><div class="who"><span class="th">มุมมองสำหรับสาขา</span></div></div>
+    <div class="wrap">
+      <div class="pagehead"><div><div class="kicker">${b.code} · ลิงก์เฉพาะสาขา</div><h1 class="th">${esc(b.nameEn)}</h1>${b.nameTh?`<div class="muted th">${esc(b.nameTh)}</div>`:''}</div></div>
+      <div id="infoCard"></div><div id="roundsCard"></div><div id="ordersCard"></div>
+      <div class="foot">JIANCHA · ลิงก์นี้แสดงเฉพาะข้อมูลสาขา ${esc(b.code)} และออเดอร์เดือนปัจจุบันเท่านั้น</div>
+    </div>`;
+  drawBranchInfo(b);
+  drawRounds(b,false);
+  drawOrders(b,{role:'viewer',scope:[code],canEdit:false},{scope:'share'});
+}
+
+/* ---------- boot ---------- */
+loadDB();
+window.addEventListener('hashchange',render);
+render();
+</script>
+</body>
+</html>
