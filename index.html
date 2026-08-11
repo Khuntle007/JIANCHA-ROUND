@@ -1009,7 +1009,7 @@ function branchRoundsModal(b,onSaved,opts){opts=opts||{};
           <option value="dry" ${r.category==='dry'?'selected':''}>ของแห้ง</option>
           <option value="fresh" ${r.category==='fresh'?'selected':''}>ของสด</option></select></div>
         <div class="field rr-whwrap"><label>คลัง</label><select class="rr-wh">${WAREHOUSES.map(w=>`<option ${r.warehouse===w?'selected':''}>${w}</option>`).join('')}</select></div>
-        <div class="field rr-ftwrap"><label>ชนิดของสด</label><select class="rr-ft">${FRESH_TYPES.map(f=>`<option ${r.freshType===f?'selected':''}>${f}</option>`).join('')}</select></div>
+        <div class="field rr-ftwrap"><label>ชนิดของสด</label><input class="rr-ft" value="${esc(r.freshType||'')}" placeholder="เช่น นมสด, ผลไม้, โยเกิร์ต"></div>
       </div>
       <div class="field"><label>ชื่อสินค้า</label><input class="rr-prod" value="${esc(r.product)}" placeholder="เช่น นมสดมาลี / เมจิ"></div>
       <div class="field"><label>รอบสั่ง — สั่งวันไหน ภายในกี่โมง รับของวันไหน</label>
@@ -1053,7 +1053,7 @@ function branchRoundsModal(b,onSaved,opts){opts=opts||{};
         deliver:+sr.querySelector('.sl-deliver').value}));
       rounds.push({id:uid('r'),category:cat,
         warehouse:cat==='dry'?el.querySelector('.rr-wh').value:'',
-        freshType:cat==='fresh'?el.querySelector('.rr-ft').value:'',
+        freshType:cat==='fresh'?el.querySelector('.rr-ft').value.trim():'',
         product:prod,slots});
     });
     b.rounds=rounds;saveDB();closeModal();toast('บันทึกรอบสั่ง–รับของแล้ว');if(onSaved)onSaved();
