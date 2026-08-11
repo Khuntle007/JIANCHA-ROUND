@@ -393,6 +393,13 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 function emblemSVG(){return $('#emblem-tpl').innerHTML}
 function branchByCode(c){return DB.branches.find(b=>b.code===c)}
 function fmtDate(iso){if(!iso)return '—';const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit'})}
+/* ช่องวันที่แบบ วว/ดด/ปปปป (เก็บภายในเป็น ISO yyyy-mm-dd) */
+function isoToDMY(iso){if(!iso)return '';const p=(iso+'').split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:'';}
+function dmyToISO(s){const m=(s||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(!m)return '';const d=+m[1],mo=+m[2],y=+m[3];if(mo<1||mo>12||d<1||d>31)return '';return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+function dmyField(attrs,iso){return `<input type="text" inputmode="numeric" class="dmy" placeholder="วว/ดด/ปปปป" maxlength="10" value="${isoToDMY(iso)}" ${attrs||''}>`;}
+function wireDates(root){(root||document).querySelectorAll('input.dmy').forEach(el=>{ if(el._dmy)return; el._dmy=1;
+  el.addEventListener('input',()=>{let v=el.value.replace(/[^0-9]/g,'').slice(0,8),o=v;if(v.length>=5)o=v.slice(0,2)+'/'+v.slice(2,4)+'/'+v.slice(4);else if(v.length>=3)o=v.slice(0,2)+'/'+v.slice(2);el.value=o;});
+});}
 function sameMonth(iso,y,m){return iso.slice(0,7)===`${y}-${String(m+1).padStart(2,'0')}`}
 function curUser(){return DB.users.find(u=>u.id===S.uid)||null}
 function canSeeBranch(u,code){return !!u}
@@ -687,7 +694,7 @@ function drawAffected(u){
           html+=`<tr>
             <td class="small">${b.code}</td>
             <td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td>
-            <td>${isAdmin?`<input type="date" data-sp-date="${h.date}" data-sp-branch="${b.code}" data-sp-line="${esc(L.key)}" value="${sp.newDate||''}" style="padding:.3em">`:`<span class="th">${sp.newDate?fmtDate(sp.newDate):'—'}</span>`}</td>
+            <td>${isAdmin?dmyField(`data-sp-date="${h.date}" data-sp-branch="${b.code}" data-sp-line="${esc(L.key)}" style="padding:.3em;width:120px"`,sp.newDate):`<span class="th">${sp.newDate?fmtDate(sp.newDate):'—'}</span>`}</td>
             <td>${isAdmin?`<input type="text" data-note-date="${h.date}" data-note-branch="${b.code}" data-note-line="${esc(L.key)}" value="${esc(sp.note||'')}" placeholder="หมายเหตุ" style="padding:.3em;width:100%">`:`<span class="th small">${esc(sp.note||'—')}</span>`}</td>
           </tr>`;
         });
@@ -699,7 +706,8 @@ function drawAffected(u){
   });
   box.innerHTML=html;
   if(isAdmin){
-    $$('#affected input[data-sp-date]').forEach(inp=>inp.onchange=()=>saveSpecial(inp.dataset.spDate,inp.dataset.spBranch,inp.dataset.spLine,{newDate:inp.value}));
+    wireDates($('#affected'));
+    $$('#affected input[data-sp-date]').forEach(inp=>inp.onchange=()=>saveSpecial(inp.dataset.spDate,inp.dataset.spBranch,inp.dataset.spLine,{newDate:dmyToISO(inp.value)}));
     $$('#affected input[data-note-date]').forEach(inp=>inp.onchange=()=>saveSpecial(inp.dataset.noteDate,inp.dataset.noteBranch,inp.dataset.noteLine,{note:inp.value}));
   }
 }
@@ -907,6 +915,7 @@ function drawOrders(b,u,opt){
    ============================================================ */
 function openModal(html){$('#modal-root').innerHTML=`<div class="overlay">${html}</div>`;
   $('#modal-root .overlay').onclick=e=>{if(e.target.classList.contains('overlay'))closeModal()};
+  wireDates($('#modal-root'));
 }
 function closeModal(){$('#modal-root').innerHTML=''}
 function confirmDialog(msg,onYes,opt){opt=opt||{};
@@ -930,7 +939,7 @@ function editBranchModal(b,u){
       <div class="field"><label>เบอร์โทรสาขา</label><input id="f_phone" value="${esc(b.phone)}"></div>
       <div class="field"><label>AM ที่ดูแล</label><input id="f_am" value="${esc(b.am)}"></div>
       <div class="field"><label>บริษัทเจ้าของ</label><input id="f_company" value="${esc(b.company)}"></div>
-      <div class="field"><label>เปิดร้านตั้งแต่</label><input id="f_open" type="date" value="${esc(b.openDate)}"></div>
+      <div class="field"><label>เปิดร้านตั้งแต่</label>${dmyField('id="f_open"',b.openDate)}</div>
     </div>
     <div class="field"><label>ที่อยู่</label><textarea id="f_addr" rows="2">${esc(b.address)}</textarea></div>
     <div class="grid2">
@@ -948,7 +957,7 @@ function editBranchModal(b,u){
     if(isNew&&branchByCode(code)){toast('รหัสสาขานี้มีอยู่แล้ว');return}
     Object.assign(b,{code,nameEn:$('#f_en').value.trim(),nameTh:$('#f_th').value.trim(),type:$('#f_type').value,
       phone:$('#f_phone').value.trim(),am:$('#f_am').value.trim(),company:$('#f_company').value.trim(),
-      openDate:$('#f_open').value,address:$('#f_addr').value.trim(),mallCondition:$('#f_mall').value.trim(),mapUrl:$('#f_map').value.trim()});
+      openDate:dmyToISO($('#f_open').value),address:$('#f_addr').value.trim(),mallCondition:$('#f_mall').value.trim(),mapUrl:$('#f_map').value.trim()});
     if(isNew)DB.branches.push(b);
     saveDB();closeModal();render();toast(isNew?'เพิ่มสาขาแล้ว':'บันทึกแล้ว');
   };
@@ -1061,8 +1070,8 @@ function orderModal(b,o){
       <div class="field"><label>เลขที่ TR/PO</label><input id="o_dn" value="${esc(o.docNo)}" placeholder="เช่น PO-6808-0451"></div>
       <div class="field"><label>ประเภทสินค้า</label><select id="o_cat"><option value="dry" ${o.category==='dry'?'selected':''}>ของแห้ง</option><option value="fresh" ${o.category==='fresh'?'selected':''}>ของสด</option></select></div>
       <div class="field" id="o_sub"></div>
-      <div class="field"><label>วันที่สั่ง</label><input id="o_od" type="date" value="${esc(o.orderDate)}"></div>
-      <div class="field"><label>วันที่ส่ง</label><input id="o_dd" type="date" value="${esc(o.deliveryDate)}"></div>
+      <div class="field"><label>วันที่สั่ง</label>${dmyField('id="o_od"',o.orderDate)}</div>
+      <div class="field"><label>วันที่ส่ง</label>${dmyField('id="o_dd"',o.deliveryDate)}</div>
     </div>
     <div class="field"><label>ชื่อสินค้า</label><input id="o_prod" value="${esc(o.product)}"></div>
     <div class="field"><label>สถานะ</label><select id="o_st">
@@ -1082,7 +1091,7 @@ function orderModal(b,o){
     const cat=$('#o_cat').value;
     Object.assign(o,{docType:$('#o_dt').value,docNo:$('#o_dn').value.trim(),category:cat,
       warehouse:cat==='dry'?$('#o_wh').value:'',freshType:cat==='fresh'?$('#o_ft').value:'',
-      product:$('#o_prod').value.trim(),orderDate:$('#o_od').value,deliveryDate:$('#o_dd').value,
+      product:$('#o_prod').value.trim(),orderDate:dmyToISO($('#o_od').value),deliveryDate:dmyToISO($('#o_dd').value),
       status:$('#o_st').value,note:$('#o_st').value==='complete'?'':$('#o_note').value.trim()});
     if(!o.product){toast('กรอกชื่อสินค้า');return}
     if(isNew){o.createdAt=todayISO();DB.orders.push(o)}
