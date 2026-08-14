@@ -323,6 +323,61 @@ function migrateRound(r){
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
+  if(DB&&!DB.shareSecret)DB.shareSecret=randomSecret();
+  if(DB&&DB.bootstrapped===undefined)DB.bootstrapped=DB.users&&DB.users.some(u=>u.pinHash||u.pin);
+}
+
+/* ---------- ความลับสำหรับสร้าง token ลิงก์แชร์ ----------
+   เก็บใน localStorage ไม่ได้ฝังในซอร์ส — ดู view-source ก็หาไม่เจอ
+   ทำให้เดา ?branch=JC001..JC061 เข้าไม่ได้ ต้องมี &t= ที่ถูกต้องด้วย */
+function randomSecret(){
+  const a=new Uint8Array(24); crypto.getRandomValues(a);
+  return [...a].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function shareToken(code){
+  const data=new TextEncoder().encode((DB.shareSecret||'')+'|'+code);
+  const h=await crypto.subtle.digest('SHA-256',data);
+  return [...new Uint8Array(h)].slice(0,12).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+/* เทียบแบบ constant-time กันการวัดเวลาเดาทีละตัวอักษร */
+function safeEqual(a,b){
+  a=String(a||'');b=String(b||'');
+  if(a.length!==b.length)return false;
+  let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);
+  return d===0;
+}
+
+/* ---------- PIN: เก็บเป็น hash ไม่เก็บตัวเลขจริง ----------
+   เดิมเก็บ pin:"1234" ตรง ๆ ใน localStorage — เปิด DevTools อ่านได้ทันที
+   เปลี่ยนเป็น PBKDF2-SHA256 150,000 รอบ + salt เฉพาะคน
+   ⚠️ ข้อจำกัดที่ต้องรู้: PIN 4 หลักมีแค่ 10,000 ความเป็นไปได้ ผู้ที่ได้ไฟล์
+      localStorage ไปยังเดาแบบ offline ได้อยู่ดี (การหน่วงช่วยได้แค่ชะลอ)
+      การป้องกันจริงคือ Cloudflare Access ที่ชั้นหน้าเว็บ */
+const PIN_ITER=150000;
+async function derivePin(pin,saltHex){
+  const salt=new Uint8Array(saltHex.match(/../g).map(h=>parseInt(h,16)));
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:PIN_ITER,hash:'SHA-256'},key,256);
+  return [...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function setPin(user,pin){
+  user.pinSalt=randomSecret();
+  user.pinHash=await derivePin(pin,user.pinSalt);
+  delete user.pin;                 // ลบร่องรอย plaintext ทิ้ง
+}
+async function verifyPin(user,pin){
+  if(!user.pinHash||!user.pinSalt)return false;
+  return safeEqual(await derivePin(pin,user.pinSalt),user.pinHash);
+}
+function hasPin(user){return !!(user&&user.pinHash)}
+/* แปลง PIN plaintext ที่ค้างจากเวอร์ชันเก่าให้เป็น hash แล้วลบของเดิม */
+async function migratePins(){
+  let changed=false;
+  for(const u of (DB.users||[])){
+    if(u.pin&&!u.pinHash){await setPin(u,u.pin);changed=true;}
+    if(u.pin){delete u.pin;changed=true;}
+  }
+  if(changed)saveDB();
 }
 
 function buildSeedRounds(days){
@@ -351,11 +406,11 @@ function seedDB(){
     };
   });
   const users=[
-    {id:uid('u'),name:'Main Admin',role:'MAIN ADMIN',pin:'',active:true},
-    {id:uid('u'),name:'SCM Manager',role:'SCM Manager',pin:'',active:true},
-    {id:uid('u'),name:'WH Admin',role:'WH ADMIN',pin:'',active:true},
-    {id:uid('u'),name:'PCM Admin',role:'PCM ADMIN',pin:'',active:true},
-    {id:uid('u'),name:'Operation',role:'Operation',pin:'',active:true},
+    {id:uid('u'),name:'Main Admin',role:'MAIN ADMIN',active:true},
+    {id:uid('u'),name:'SCM Manager',role:'SCM Manager',active:true},
+    {id:uid('u'),name:'WH Admin',role:'WH ADMIN',active:true},
+    {id:uid('u'),name:'PCM Admin',role:'PCM ADMIN',active:true},
+    {id:uid('u'),name:'Operation',role:'Operation',active:true},
   ];
   // sample orders across a few branches, current + last month
   const t=todayISO();
@@ -423,7 +478,7 @@ function render(){
   loadSession();
   // ---- SHARE MODE via ?branch=CODE (no login required) ----
   const url=new URLSearchParams(location.search);
-  if(url.get('branch')){renderShare(url.get('branch'));return}
+  if(url.get('branch')){renderShare(url.get('branch'),url.get('t'));return}
 
   const u=curUser();
   if(!u){renderLogin();return}
@@ -477,8 +532,22 @@ function renderLogin(){
   pinBuf='';
   const u = loginUserId ? DB.users.find(x=>x.id===loginUserId) : null;
   if(!u){ document.onkeydown=null; renderUserPick(); return; }
+  /* หลังตั้งค่าระบบครั้งแรกแล้ว ห้ามใครก็ได้เดินมาตั้ง PIN ของบัญชีที่ยังว่าง
+     (เดิม: คนแรกที่เปิดเว็บกด MAIN ADMIN แล้วตั้ง PIN เองได้ทันที)
+     ต่อจากนี้ผู้ดูแลต้องเป็นคนออก PIN ชั่วคราวให้ในหน้า "สิทธิ์ผู้ใช้" */
+  if(!hasPin(u)&&DB.bootstrapped){
+    $('#app').innerHTML=`
+    <div class="loginwrap"><div class="loginbox" style="max-width:340px;text-align:center">
+      <span style="display:inline-block;width:44px;color:var(--jc-gold)">${emblemSVG()}</span>
+      <div class="head th" style="font-size:1rem;margin:.6rem 0 .3rem">${esc(u.name)}</div>
+      <div class="th small muted">บัญชีนี้ยังไม่ได้รับ PIN<br>กรุณาติดต่อผู้ดูแลระบบเพื่อขอ PIN ชั่วคราว</div>
+      <a href="#" id="pinBack" class="small muted" style="display:inline-block;margin-top:1.2rem">‹ เปลี่ยนผู้ใช้</a>
+    </div></div>`;
+    $('#pinBack').onclick=(e)=>{e.preventDefault();loginUserId=null;renderLogin();};
+    return;
+  }
   // โหมด: enter (มี PIN แล้ว) · set1 (ตั้งใหม่) · set2 (ยืนยัน)
-  let mode = u.pin ? 'enter' : (loginPhase==='set2'?'set2':'set1');
+  let mode = hasPin(u) ? 'enter' : (loginPhase==='set2'?'set2':'set1');
   loginPhase = mode;
   const heading = mode==='enter' ? 'ใส่ PIN'
                 : mode==='set1'  ? 'ตั้ง PIN ใหม่ 4 หลัก'
@@ -497,14 +566,22 @@ function renderLogin(){
   </div></div>`;
   const drawDots=()=>{$('#pinDots').innerHTML=[0,1,2,3].map(i=>`<span class="pindot ${i<pinBuf.length?'on':''}"></span>`).join('')};
   const shake=()=>{const bx=$('#pinBox');if(bx){bx.classList.add('shake');setTimeout(()=>bx.classList.remove('shake'),400);}};
-  const submit=()=>{
+  const submit=async()=>{
     if(mode==='enter'){
-      if(pinBuf===u.pin){ finishLogin(u); return; }
-      pinBuf='';drawDots();$('#pinMsg').textContent='PIN ไม่ถูกต้อง';shake();return;
+      const msg=$('#pinMsg'); if(msg)msg.textContent='กำลังตรวจสอบ…';
+      const ok=await verifyPin(u,pinBuf);          // PBKDF2 ใช้เวลาสักครู่ — หน่วงการเดาไปในตัว
+      if(ok){ finishLogin(u); return; }
+      pinBuf='';drawDots();
+      const m=$('#pinMsg'); if(m)m.textContent='PIN ไม่ถูกต้อง';
+      shake();return;
     }
     if(mode==='set1'){ loginFirstPin=pinBuf; loginPhase='set2'; renderLogin(); return; }
     if(mode==='set2'){
-      if(pinBuf===loginFirstPin){ u.pin=pinBuf; saveDB(); finishLogin(u); return; }
+      if(pinBuf===loginFirstPin){
+        await setPin(u,pinBuf);
+        DB.bootstrapped=true;                       // ตั้งค่าครั้งแรกเสร็จ — ปิดช่องให้คนอื่นมาตั้งเอง
+        saveDB(); finishLogin(u); return;
+      }
       loginFirstPin=''; loginPhase='set1'; pinBuf='';
       renderLogin(); $('#pinMsg').textContent='PIN ไม่ตรงกัน ลองใหม่'; shake(); return;
     }
@@ -535,10 +612,11 @@ function renderUserPick(){
     <div class="small muted" style="letter-spacing:.14em;margin-bottom:1.2rem">ROUNDS SYSTEM</div>
     <div class="th" style="margin-bottom:.8rem">เลือกผู้ใช้เพื่อเข้าสู่ระบบ</div>
     <div style="display:flex;flex-direction:column;gap:.5rem;text-align:left">
-      ${users.map(u=>`<button class="userpick" data-uid="${u.id}">
+      ${users.map(u=>{const set=hasPin(u),lock=!set&&DB.bootstrapped;
+        return `<button class="userpick" data-uid="${u.id}">
         <div><div class="th" style="font-weight:600">${esc(u.name)}</div><div class="small muted">${esc(u.role)}</div></div>
-        <span class="small ${u.pin?'muted':''}" style="${u.pin?'':'color:var(--jc-gold)'}">${u.pin?'••••':'ตั้ง PIN ครั้งแรก'} ›</span>
-      </button>`).join('')}
+        <span class="small ${set?'muted':''}" style="${set?'':'color:var(--jc-gold)'}">${set?'••••':(lock?'รอผู้ดูแลออก PIN':'ตั้ง PIN ครั้งแรก')} ›</span>
+      </button>`}).join('')}
     </div>
   </div></div>`;
   $$('.userpick').forEach(b=>b.onclick=()=>{loginUserId=b.dataset.uid;loginPhase=null;loginFirstPin='';renderLogin();});
@@ -859,8 +937,15 @@ function drawRounds(b,canEdit){
 /* ----- ORDERS board (PO/TR) ----- */
 function drawOrders(b,u,opt){
   opt=opt||{};
-  const canEdit=can('editOrders');
   const shareMode=opt.scope==='share';
+  /* สิทธิ์ 'orders' ต้องถูกบังคับใช้จริง — เดิมประกาศไว้ใน FEATURES แต่ไม่เคยถูกตรวจ
+     ทำให้ผู้ใช้ที่ถูกปิดสิทธิ์ยังเห็นเลข PO/TR และหมายเหตุภายในทั้งหมด */
+  if(!shareMode&&!can('orders')){
+    $('#ordersCard').innerHTML=`<div class="card"><div class="grouphead">ออเดอร์ที่สาขาสั่ง (PO / TR)<span class="line"></span></div>
+      <div class="empty th">บัญชีของคุณไม่มีสิทธิ์ดูออเดอร์ — ติดต่อผู้ดูแลระบบ</div></div>`;
+    return;
+  }
+  const canEdit=can('editOrders');
   let list=DB.orders.filter(o=>o.branch===b.code);
   // share / viewer default: current month only (by order date)
   if(shareMode){const n=new Date();list=list.filter(o=>sameMonth(o.orderDate,n.getFullYear(),n.getMonth()))}
@@ -868,18 +953,21 @@ function drawOrders(b,u,opt){
   const dry=list.filter(o=>o.category==='dry');
   const freshGroups=FRESH_TYPES.map(ft=>({ft,items:list.filter(o=>o.category==='fresh'&&o.freshType===ft)})).filter(g=>g.items.length);
 
+  /* มุมมองแชร์ = คนนอกองค์กร จึงไม่แสดงข้อมูลภายใน:
+     เลขเอกสาร PO/TR (ใช้อ้างอิงในระบบจัดซื้อ) และหมายเหตุ (มีเหตุผลการตัดของ/สถานะการเงิน)
+     สาขาต้องการรู้แค่ "ของอะไร มาวันไหน สถานะอะไร" */
   const orderTable=(items)=>`<div class="tblwrap"><table>
-    <thead><tr><th>วันที่สั่ง</th><th>เลข TR/PO</th><th>คลัง/ชนิด</th><th>ชื่อสินค้า</th><th>วันที่ส่ง</th><th>สถานะ</th><th>หมายเหตุ</th>${canEdit&&!shareMode?'<th></th>':''}</tr></thead>
+    <thead><tr><th>วันที่สั่ง</th>${shareMode?'':'<th>เลข TR/PO</th>'}<th>คลัง/ชนิด</th><th>ชื่อสินค้า</th><th>วันที่ส่ง</th><th>สถานะ</th>${shareMode?'':'<th>หมายเหตุ</th>'}${canEdit&&!shareMode?'<th></th>':''}</tr></thead>
     <tbody>${items.map(o=>{
       const sm=statusMeta(o.status);
       return `<tr>
         <td class="small">${fmtDate(o.orderDate)}</td>
-        <td><b class="small">${esc(o.docType)}</b><div class="small muted">${esc(o.docNo)}</div></td>
+        ${shareMode?'':`<td><b class="small">${esc(o.docType)}</b><div class="small muted">${esc(o.docNo)}</div></td>`}
         <td class="small th">${o.category==='dry'?esc(o.warehouse):esc(o.freshType)}</td>
         <td class="th">${esc(o.product)}</td>
         <td class="small">${fmtDate(o.deliveryDate)}</td>
         <td><span class="status ${sm.cls}" ${canEdit&&!shareMode?`data-cyc="${o.id}"`:''} title="${canEdit&&!shareMode?'คลิกเพื่อเปลี่ยนสถานะ':''}"><span class="dot ${sm.cls}"></span>${sm.label}</span></td>
-        <td class="small th muted">${esc(o.note||'—')}</td>
+        ${shareMode?'':`<td class="small th muted">${esc(o.note||'—')}</td>`}
         ${canEdit&&!shareMode?`<td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-edit-o="${o.id}">แก้</button><button class="btn sm ghost" data-del-o="${o.id}">ลบ</button></td>`:''}
       </tr>`}).join('')}</tbody></table></div>`;
 
@@ -1099,12 +1187,13 @@ function orderModal(b,o){
   };
 }
 
-function shareModal(b){
+async function shareModal(b){
   const base=location.origin+location.pathname;
-  const link=`${base}?branch=${encodeURIComponent(b.code)}`;
+  const link=`${base}?branch=${encodeURIComponent(b.code)}&t=${await shareToken(b.code)}`;
   openModal(`<div class="modal"><button class="x" onclick="closeModal()">×</button>
     <h2>แชร์ลิงก์สาขา</h2>
-    <p class="th small muted">ผู้ที่เปิดลิงก์นี้จะเห็น<strong>เฉพาะข้อมูลสาขา ${esc(b.nameEn)}</strong> และเห็นออเดอร์ PO/TR <strong>เฉพาะเดือนปัจจุบัน</strong> (นับจากวันที่สั่ง) โดยไม่เห็นสาขาอื่นและแก้ไขไม่ได้</p>
+    <p class="th small muted">ผู้ที่เปิดลิงก์นี้จะเห็น<strong>เฉพาะข้อมูลสาขา ${esc(b.nameEn)}</strong> และรายการของ <strong>เฉพาะเดือนปัจจุบัน</strong> (นับจากวันที่สั่ง) โดยไม่เห็นสาขาอื่นและแก้ไขไม่ได้<br>
+      <strong>ไม่แสดง</strong>เลขเอกสาร PO/TR และหมายเหตุภายใน · ลิงก์มีรหัสกำกับเฉพาะสาขา เดารหัสสาขาอื่นเข้าไม่ได้</p>
     <div class="field"><label>ลิงก์แชร์</label><input id="shareLink" value="${esc(link)}" readonly></div>
     <div class="banner th small">หมายเหตุ (ต้นแบบ): ลิงก์ทำงานบนเบราว์เซอร์ที่มีข้อมูลนี้อยู่ เมื่อขึ้นระบบหลังบ้านจริง ลิงก์จะเปิดได้จากทุกอุปกรณ์</div>
     <div class="row" style="justify-content:flex-end">
@@ -1137,7 +1226,7 @@ function renderUsers(main,u){
     <div class="card" style="padding:0"><div class="tblwrap"><table class="permtbl">
       <thead><tr><th style="text-align:left">ผู้ใช้</th>${FEATURES.map(f=>`<th title="${esc(f.label)}">${esc(f.short)}</th>`).join('')}<th></th></tr></thead>
       <tbody>${DB.users.map(x=>`<tr class="${x.active===false?'inactive':''}">
-        <td style="text-align:left;white-space:nowrap"><b class="th">${esc(x.name)}</b><div class="small muted">${esc(x.role)}${x.pin?'':' · <span style="color:var(--jc-gold)">ยังไม่ตั้ง PIN</span>'}${x.active===false?' · ปิดใช้งาน':''}</div></td>
+        <td style="text-align:left;white-space:nowrap"><b class="th">${esc(x.name)}</b><div class="small muted">${esc(x.role)}${hasPin(x)?'':' · <span style="color:var(--jc-gold)">ยังไม่ตั้ง PIN</span>'}${x.active===false?' · ปิดใช้งาน':''}</div></td>
         ${FEATURES.map(f=>`<td><input type="checkbox" class="permcell" data-uid="${x.id}" data-perm="${f.key}" ${x.perms&&x.perms[f.key]?'checked':''}></td>`).join('')}
         <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button><button class="btn sm ghost" data-du="${x.id}">ลบ</button></td>
       </tr>`).join('')}</tbody></table></div></div>
@@ -1166,7 +1255,7 @@ function userModal(x){
     <div class="grid2">
       <div class="field"><label>ชื่อ / ตำแหน่ง</label><input id="u_name" value="${esc(x.name)}" placeholder="เช่น สมชาย (WH)"></div>
       <div class="field"><label>บทบาท</label><select id="u_role">${ALL_ROLES.map(r=>`<option ${x.role===r?'selected':''}>${r}</option>`).join('')}</select></div>
-      <div class="field"><label>PIN (4 หลัก — เว้นว่างได้)</label><input id="u_pin" inputmode="numeric" maxlength="4" value="${esc(x.pin||'')}" placeholder="ให้ผู้ใช้ตั้งเองครั้งแรก" style="letter-spacing:.3em"></div>
+      <div class="field"><label>${hasPin(x)?'ตั้ง PIN ใหม่ (เว้นว่าง = ไม่เปลี่ยน)':'ออก PIN ชั่วคราว 4 หลัก'}</label><input id="u_pin" inputmode="numeric" maxlength="4" value="" placeholder="${hasPin(x)?'••••  ตั้งไว้แล้ว':'เช่น 4821'}" style="letter-spacing:.3em"></div>
       <div class="field" style="align-self:end"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="u_active" ${x.active!==false?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>
     </div>
     <div class="field"><label>สิทธิ์การเข้าถึง — ติ๊กเลือกฟังก์ชัน <a href="#" id="u_setdefault" class="small" style="color:var(--jc-gold);text-transform:none;letter-spacing:0">(ตั้งตามบทบาท)</a></label>
@@ -1177,25 +1266,30 @@ function userModal(x){
   $('#u_role').onchange=applyRoleDefault;
   $('#u_setdefault').onclick=(e)=>{e.preventDefault();applyRoleDefault();};
   $('#u_pin').oninput=e=>{e.target.value=e.target.value.replace(/[^0-9]/g,'').slice(0,4);};
-  $('#u_save').onclick=()=>{
+  $('#u_save').onclick=async()=>{
     const name=$('#u_name').value.trim(), role=$('#u_role').value, pin=$('#u_pin').value.trim();
     if(!name){toast('กรอกชื่อ');return}
-    if(pin&&!/^\d{4}$/.test(pin)){toast('PIN ต้องเป็นตัวเลข 4 หลัก (หรือเว้นว่างให้ผู้ใช้ตั้งเอง)');return}
-    if(pin&&DB.users.some(z=>z.pin===pin&&z.id!==x.id)){toast('PIN นี้ถูกใช้แล้ว เลือกเลขอื่น');return}
+    if(pin&&!/^\d{4}$/.test(pin)){toast('PIN ต้องเป็นตัวเลข 4 หลัก (หรือเว้นว่างไว้)');return}
+    /* ไม่ตรวจ PIN ซ้ำอีกแล้ว — ตรวจไม่ได้เพราะเก็บเป็น hash คนละ salt
+       และไม่จำเป็น เพราะผู้ใช้ต้อง "เลือกชื่อตัวเอง" ก่อนใส่ PIN อยู่แล้ว */
     const perms={}; $$('.u_perm:checked').forEach(i=>perms[i.value]=true);
-    Object.assign(x,{name,role,pin,active:$('#u_active').checked,perms});
+    Object.assign(x,{name,role,active:$('#u_active').checked,perms});
+    if(pin)await setPin(x,pin);
     if(isNew)DB.users.push(x);
-    saveDB();closeModal();render();toast('บันทึกผู้ใช้แล้ว');
+    saveDB();closeModal();render();toast(pin?'บันทึกแล้ว · แจ้ง PIN ให้ผู้ใช้ทราบด้วยตนเอง':'บันทึกผู้ใช้แล้ว');
   };
 }
 
 /* ============================================================
    SHARE VIEW (public, single branch, current month)
    ============================================================ */
-function renderShare(code){
+async function renderShare(code,token){
   const b=branchByCode(code);
   const app=$('#app');
-  if(!b){app.innerHTML=`<div class="wrap"><div class="card"><div class="empty th">ไม่พบสาขา หรือลิงก์ไม่ถูกต้อง</div></div></div>`;return}
+  const bad=()=>{app.innerHTML=`<div class="wrap"><div class="card"><div class="empty th">ไม่พบสาขา หรือลิงก์ไม่ถูกต้อง</div></div></div>`};
+  if(!b){bad();return}
+  /* ต้องมี token ที่ตรงกับสาขานี้เท่านั้น — กันการไล่เดารหัสสาขา */
+  if(!safeEqual(token,await shareToken(code))){bad();return}
   app.innerHTML=`
     <div class="topbar"><div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ROUNDS · แชร์</small></div></div>
       <div class="spacer"></div><div class="who"><span class="th">มุมมองสำหรับสาขา</span></div></div>
@@ -1210,9 +1304,13 @@ function renderShare(code){
 }
 
 /* ---------- boot ---------- */
-loadDB();
-window.addEventListener('hashchange',render);
-render();
+(async()=>{
+  loadDB();
+  await migratePins();          // แปลง PIN plaintext ที่ค้างจากเวอร์ชันเก่าเป็น hash ก่อนวาดหน้าจอ
+  saveDB();                     // เก็บ shareSecret / bootstrapped ที่ migrateDB เพิ่งเติม
+  window.addEventListener('hashchange',render);
+  render();
+})();
 </script>
 </body>
 </html>
