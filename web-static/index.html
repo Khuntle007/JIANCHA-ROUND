@@ -334,10 +334,46 @@ function applyCTIRounds(db){
   });
   set(CTI_ROUTE1,CTI_SLOTS1); set(CTI_ROUTE2,CTI_SLOTS2);
 }
+/* ===== รอบของสด (จากไฟล์รอบสั่ง-ส่งของสด มีผล 2026) ===== */
+/* pattern 7 หลัก = จ อ พ พฤ ศ ส อา · malee/meji/vip = วันส่ง (สั่งล่วงหน้า1วัน ก่อน12:00) · yogurt = วันสั่ง (ส่งวันถัดไป ก่อน12:00) */
+const FR_MALEE={JC001:"1111100",JC002:"1001000",JC003:"1111100",JC004:"1111100",JC005:"1000100",JC006:"1111100",JC007:"1111010",JC008:"1111010",JC009:"1111100",JC010:"0101000",JC011:"1010100",JC012:"1111100",JC013:"0101000",JC014:"1001000",JC015:"1000100",JC016:"0101000",JC017:"1010100",JC018:"1001000",JC019:"1111010",JC020:"1000100",JC021:"1111100",JC022:"1111010",JC023:"1111010",JC024:"1001000",JC025:"0101000",JC026:"1111100",JC027:"1111010",JC028:"1001000",JC029:"0101000",JC030:"1111100",JC031:"0101000",JC032:"1000100",JC033:"0101000",JC034:"1010100",JC035:"1111010",JC036:"1111100",JC037:"1111100",JC038:"1111100",JC039:"0101000",JC040:"1111100",JC041:"1010100",JC042:"1111100",JC043:"0100000",JC044:"1111100",JC045:"1010100",JC046:"1001000",JC047:"1111100",JC048:"0010000",JC049:"0100000",JC050:"1000100",JC051:"1000100",JC052:"0010000",JC053:"1111100",JC054:"0101000",JC055:"1001000",JC056:"1011100",JC057:"1111010",JC058:"1001000",JC059:"0101100",JC060:"0101100",JC061:"0101100"};
+const FR_MEJI={JC026:"0101010",JC004:"0101010",JC044:"0101010",JC034:"0101010"};
+const FR_VIP={JC001:"1101000",JC002:"1101000",JC003:"1101000",JC004:"1101000",JC005:"1101000",JC006:"1101000",JC007:"1101000",JC008:"1101000",JC009:"1101000",JC010:"1101000",JC012:"1101000",JC013:"1101000",JC014:"1101000",JC015:"1101000",JC016:"1101000",JC017:"1101000",JC018:"1101000",JC019:"1101000",JC020:"1101000",JC021:"1101000",JC022:"1101000",JC023:"1101000",JC024:"1101000",JC025:"1101000",JC026:"1101000",JC027:"1101000",JC028:"1101000",JC029:"1101000",JC030:"1101000",JC031:"1101000",JC032:"1101000",JC033:"1101000",JC034:"1101000",JC035:"1101000",JC037:"1101000",JC038:"1101000",JC039:"1101000",JC040:"1101000",JC041:"1101000",JC042:"1101000",JC043:"1010100",JC044:"1101000",JC045:"1101000",JC046:"1101000",JC047:"1101000",JC048:"0000010",JC049:"1101000",JC050:"1101000",JC051:"1101000",JC052:"1111110",JC053:"1101000",JC054:"1101000",JC055:"1101000",JC056:"1101000",JC057:"1101000",JC058:"1101000",JC059:"1101000",JC060:"1101000",JC061:"1101000"};
+const FR_YOGURT={JC030:"1010000",JC034:"0001100",JC014:"1010000",JC003:"1010000",JC012:"1010000",JC004:"1010000",JC026:"1010000",JC008:"1010000",JC002:"0001100",JC009:"1010000",JC017:"0001100",JC018:"1010000",JC019:"1010000",JC021:"1010000",JC022:"1010000",JC024:"1010000",JC023:"1010000",JC020:"1010000",JC005:"1010000",JC015:"1010000",JC013:"1010000",JC010:"0001100",JC016:"0001100",JC025:"0001100",JC052:"0101000",JC027:"1010000",JC028:"0001100",JC029:"0001100",JC007:"1010000",JC006:"0001100",JC031:"1001000",JC033:"1010000",JC032:"0101000",JC035:"1010000",JC044:"1010000",JC043:"0101100",JC045:"0101100",JC056:"0101100",JC037:"0101100",JC041:"1010000",JC047:"1010000",JC048:"0001000",JC053:"1010000",JC054:"1010000",JC055:"1010000",JC046:"1010000",JC051:"0101100",JC038:"1010000",JC050:"0101100",JC049:"1010000",JC042:"1010000",JC057:"1010000",JC058:"1010000",JC059:"0101100",JC060:"0101100",JC061:"1010100"};
+function fSlotsDeliver(pat){const o=[];for(let d=0;d<7;d++)if(pat[d]==='1')o.push({order:(d+6)%7,cutoff:'12:00',deliver:d});return o;}
+function fSlotsOrder(pat){const o=[];for(let x=0;x<7;x++)if(pat[x]==='1')o.push({order:x,cutoff:'12:00',deliver:(x+1)%7});return o;}
+function applyFreshRounds(db){
+  const REG_PY=['JC052','JC048'];            // พัทยา/ระยอง (ผลไม้)
+  const REG_PYN=['JC052','JC048','JC049'];   // พัทยา/ระยอง/นครปฐม (ไอซ์ฮอต)
+  const CM=['JC043'];                        // เชียงใหม่
+  db.branches.forEach(b=>{
+    b.rounds=(b.rounds||[]).filter(r=>r.category!=='fresh'); // ล้างของสดตัวอย่างเดิม
+    const add=(ft,prod,slots)=>{ if(slots&&slots.length) b.rounds.push({id:uid('r'),category:'fresh',warehouse:'',freshType:ft,product:prod,slots}); };
+    if(FR_MALEE[b.code])  add('นมสด','นมสดมาลี',fSlotsDeliver(FR_MALEE[b.code]));
+    if(FR_MEJI[b.code])   add('นมสด','นมเมจิ (ทำไอติม)',fSlotsDeliver(FR_MEJI[b.code]));
+    if(FR_VIP[b.code])    add('วิปปิ้งครีม & ครีมชีส','วิปปิ้งครีม / ครีมชีส',fSlotsDeliver(FR_VIP[b.code]));
+    if(FR_YOGURT[b.code]) add('โยเกิร์ต','โยเกิร์ต',fSlotsOrder(FR_YOGURT[b.code]));
+    // ผลไม้ (แยกภาค)
+    const fruit = REG_PY.includes(b.code)
+      ? [{order:5,cutoff:'12:00',deliver:0},{order:2,cutoff:'12:00',deliver:3},{order:3,cutoff:'12:00',deliver:4}]
+      : [0,1,2,3,4,5,6].map(d=>({order:d,cutoff:'12:00',deliver:(d+1)%7})); // กทม/ปริมณฑล = สั่งทุกวัน ส่งวันถัดไป
+    add('ผลไม้','ผลไม้สด',fruit);
+    // ไอซ์ฮอต (แยกภาค)
+    const ice = REG_PYN.includes(b.code)
+      ? [{order:0,cutoff:'12:00',deliver:3},{order:2,cutoff:'12:00',deliver:5},{order:4,cutoff:'12:00',deliver:1}]
+      : CM.includes(b.code)
+        ? [{order:2,cutoff:'12:00',deliver:4},{order:4,cutoff:'12:00',deliver:1}]
+        : [{order:0,cutoff:'12:00',deliver:2},{order:2,cutoff:'12:00',deliver:4},{order:4,cutoff:'12:00',deliver:0}]; // เขตกลาง
+    add('ไอซ์ฮอต','ไอซ์ฮอต',ice);
+  });
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
-  if(DB){ if(!DB.meta)DB.meta={}; if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; } }
+  if(DB){ if(!DB.meta)DB.meta={};
+    if(!DB.meta.freshV1){ applyFreshRounds(DB); DB.meta.freshV1=true; }
+    if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; }
+  }
 }
 
 function buildSeedRounds(days){
