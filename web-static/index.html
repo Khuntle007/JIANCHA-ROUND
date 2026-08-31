@@ -376,6 +376,18 @@ function applyHaviRounds(db){
     b.rounds.push({id:uid('r'),category:'dry',warehouse:'WH003',freshType:'',product:'สินค้า Frozen (HAVI)',slots});
   });
 }
+/* เติมรอบมาตรฐานให้สาขาที่ต้นฉบับไม่ได้ระบุ (ทำเครื่องหมาย ⚠️รอตรวจสอบ) */
+const REVIEW_MARK=' ⚠️รอตรวจสอบ';
+function fillDefaultRounds(db){
+  db.branches.forEach(b=>{
+    const hasDry=w=>b.rounds.some(r=>r.category==='dry'&&r.warehouse===w);
+    const hasFresh=ft=>b.rounds.some(r=>r.category==='fresh'&&r.freshType===ft);
+    if(!hasDry('WH001')) b.rounds.push({id:uid('r'),category:'dry',warehouse:'WH001',freshType:'',product:'ของแห้ง (คลัง CTI)'+REVIEW_MARK,review:true,slots:CTI_SLOTS1.map(s=>({...s}))});
+    if(!hasDry('WH003')) b.rounds.push({id:uid('r'),category:'dry',warehouse:'WH003',freshType:'',product:'สินค้า Frozen (HAVI)'+REVIEW_MARK,review:true,slots:[[1,3],[3,5],[4,1]].map(p=>({order:p[0],cutoff:'',deliver:p[1]}))});
+    if(!hasFresh('โยเกิร์ต')) b.rounds.push({id:uid('r'),category:'fresh',warehouse:'',freshType:'โยเกิร์ต',product:'โยเกิร์ต'+REVIEW_MARK,review:true,slots:fSlotsOrder('1010000')});
+    if(!hasFresh('วิปปิ้งครีม & ครีมชีส')) b.rounds.push({id:uid('r'),category:'fresh',warehouse:'',freshType:'วิปปิ้งครีม & ครีมชีส',product:'วิปปิ้งครีม / ครีมชีส'+REVIEW_MARK,review:true,slots:fSlotsDeliver('1101000')});
+  });
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
@@ -383,6 +395,7 @@ function migrateDB(){
     if(!DB.meta.freshV1){ applyFreshRounds(DB); DB.meta.freshV1=true; }
     if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; }
     if(!DB.meta.haviV1){ applyHaviRounds(DB); DB.meta.haviV1=true; }
+    if(!DB.meta.fillV1){ fillDefaultRounds(DB); DB.meta.fillV1=true; }
   }
 }
 
