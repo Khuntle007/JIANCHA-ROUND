@@ -269,7 +269,7 @@ const DETAIL_OVERRIDE = {
 const DOW_TH = ["จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์","อาทิตย์"]; // idx0=Mon
 const DOW_TH_SUN = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์"]; // JS getDay order
 const FRESH_TYPES = ["นมสด","โยเกิร์ต","วิปปิ้งครีม & ครีมชีส","ผลไม้","ไอซ์ฮอต"];
-const WAREHOUSES = ["WH001","WH002"];
+const WAREHOUSES = ["WH001","WH002","WH003"];
 const ADMIN_ROLES = ["MAIN ADMIN","SCM Manager","WH ADMIN","PCM ADMIN"];
 const ALL_ROLES = [...ADMIN_ROLES,"Operation"];
 function isAdminRole(r){return ADMIN_ROLES.includes(r)}
@@ -367,12 +367,22 @@ function applyFreshRounds(db){
     add('ไอซ์ฮอต','ไอซ์ฮอต',ice);
   });
 }
+/* ===== WH003 สินค้า Frozen (HAVI) — [order,deliver] ต่อสาขา (day 0=จ..6=อา) ===== */
+const WH003={JC003:[[0,2],[2,4],[4,0]],JC012:[[0,2],[2,4],[4,0]],JC026:[[0,2],[2,4],[4,0]],JC004:[[0,2],[2,4],[4,0]],JC034:[[0,2],[2,4],[4,0]],JC044:[[0,2],[2,4],[4,0]],JC018:[[0,2],[2,4],[4,0]],JC002:[[0,2],[2,4],[4,0]],JC007:[[0,2],[2,4],[4,0]],JC019:[[0,2],[2,4],[4,0]],JC022:[[0,2],[2,4],[4,0]],JC027:[[0,2],[2,4],[4,0]],JC028:[[0,2],[2,4],[4,0]],JC035:[[0,2],[2,4],[4,0]],JC038:[[0,2],[2,4],[4,0]],JC032:[[0,2],[2,4],[4,0]],JC042:[[0,2],[2,4],[4,0]],JC041:[[0,2],[2,4],[4,0]],JC046:[[0,2],[2,4],[4,0]],JC047:[[0,2],[2,4],[4,0]],JC045:[[0,2],[2,4],[4,0]],JC051:[[0,2],[2,4],[4,0]],JC057:[[0,2],[2,4],[4,0]],JC006:[[1,3],[3,5],[4,1]],JC030:[[1,3],[3,5],[4,1]],JC009:[[1,3],[3,5],[4,1]],JC005:[[1,3],[3,5],[4,1]],JC008:[[1,3],[3,5],[4,1]],JC010:[[1,3],[3,5],[4,1]],JC015:[[1,3],[3,5],[4,1]],JC017:[[1,3],[3,5],[4,1]],JC020:[[1,3],[3,5],[4,1]],JC021:[[1,3],[3,5],[4,1]],JC025:[[1,3],[3,5],[4,1]],JC024:[[1,3],[3,5],[4,1]],JC052:[[3,5],[4,1]],JC029:[[1,3],[3,5],[4,1]],JC033:[[1,3],[3,5],[4,1]],JC031:[[1,3],[3,5],[4,1]],JC016:[[1,3],[3,5],[4,1]],JC037:[[1,3],[3,5],[4,1]],JC039:[[1,3],[3,5],[4,1]],JC013:[[1,3],[3,5],[4,1]],JC023:[[1,3],[3,5],[4,1]],JC050:[[1,3],[3,5],[4,1]],JC053:[[1,3],[3,5],[4,1]],JC054:[[1,3],[3,5],[4,1]],JC049:[[1,3],[3,5],[4,1]],JC058:[[1,3],[3,5],[4,1]],JC056:[[1,3],[3,5],[4,1]],JC014:[[1,3],[3,5],[4,1]],JC059:[[1,3],[3,5],[4,1]],JC060:[[0,2],[2,4],[4,0]],JC048:[[3,5],[4,1]],JC043:[[0,2],[3,5]]};
+function applyHaviRounds(db){
+  db.branches.forEach(b=>{ b.rounds=(b.rounds||[]).filter(r=>!(r.category==='dry'&&r.warehouse==='WH003')); });
+  Object.keys(WH003).forEach(code=>{const b=db.branches.find(x=>x.code===code);if(!b)return;
+    const slots=WH003[code].map(pr=>({order:pr[0],cutoff:'',deliver:pr[1]}));
+    b.rounds.push({id:uid('r'),category:'dry',warehouse:'WH003',freshType:'',product:'สินค้า Frozen (HAVI)',slots});
+  });
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
   if(DB){ if(!DB.meta)DB.meta={};
     if(!DB.meta.freshV1){ applyFreshRounds(DB); DB.meta.freshV1=true; }
     if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; }
+    if(!DB.meta.haviV1){ applyHaviRounds(DB); DB.meta.haviV1=true; }
   }
 }
 
@@ -640,7 +650,7 @@ function renderRoundsBoard(main,u){
     $('#boardBody').innerHTML=`
       <div class="grouphead" style="font-size:.82rem;margin-top:1rem"><span class="tag ${L.cat}">${esc(L.label)}</span> <span class="th">รอบสั่งของวัน${DOW_TH[boardDay]}</span><span class="line"></span><span class="pill">${list.length} สาขา</span></div>
       ${list.length?`<div class="tblwrap"><table><thead><tr><th>รหัส</th><th>สาขา</th><th>ต้องสั่งภายใน</th><th>จะได้รับของวัน</th></tr></thead><tbody>
-        ${list.map(({b,s})=>`<tr><td class="small">${b.code}</td><td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td><td class="th"><b>≤ ${esc(s.cutoff)} น.</b></td><td class="th">${DOW_TH[s.deliver]}</td></tr>`).join('')}
+        ${list.map(({b,s})=>`<tr><td class="small">${b.code}</td><td><a href="#/branch/${b.code}" class="th">${esc(b.nameEn)}</a></td><td class="th"><b>${s.cutoff?'≤ '+esc(s.cutoff)+' น.':'ตามรอบ'}</b></td><td class="th">${DOW_TH[s.deliver]}</td></tr>`).join('')}
       </tbody></table></div>`:`<div class="empty th">ไม่มีสาขาที่มีรอบสั่ง <b>${esc(L.label)}</b> ในวัน${DOW_TH[boardDay]}</div>`}`;
   };
   $$('#boardTabs .btab').forEach(t=>t.onclick=()=>{boardLine=t.dataset.line;$$('#boardTabs .btab').forEach(x=>x.classList.toggle('active',x.dataset.line===boardLine));drawBody();});
@@ -838,7 +848,7 @@ function roundsWeekTable(b){
     const label=r.category==='dry'?`<span class="tag dry">${esc(r.warehouse)}</span>`:`<span class="tag fresh">${esc(r.freshType)}</span>`;
     const cells=DOW_TH.map((d,i)=>{
       const s=slotForOrderDay(r,i);
-      return s?`<td class="wk-on"><b>≤${esc(s.cutoff)}</b><div class="wk-dl">รับ ${DOW_SHORT[s.deliver]}</div></td>`:`<td class="wk-off">—</td>`;
+      return s?`<td class="wk-on"><b>${s.cutoff?'≤'+esc(s.cutoff):'สั่ง'}</b><div class="wk-dl">รับ ${DOW_SHORT[s.deliver]}</div></td>`:`<td class="wk-off">—</td>`;
     }).join('');
     return `<tr><td class="wk-name">${label}<div class="wk-prod">${esc(r.product)}</div></td>${cells}</tr>`;
   }).join('');
