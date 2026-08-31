@@ -320,9 +320,24 @@ function migrateRound(r){
   r.slots=dd.map(d=>({order:(d+6)%7,cutoff,deliver:d}));
   return r;
 }
+/* ===== รอบของแห้งคลัง CTI (จาก PDF มีผล 13 ก.ค. 2026) — 2 route ===== */
+const CTI_ROUTE1=['JC017','JC056','JC013','JC002','JC033','JC028','JC041','JC045','JC046','JC019','JC027','JC022','JC007','JC035','JC057','JC023','JC024','JC037','JC008','JC055','JC014','JC058','JC034','JC026','JC030','JC018'];
+const CTI_ROUTE2=['JC039','JC031','JC032','JC050','JC038','JC005','JC010','JC029','JC054','JC016','JC059','JC025','JC051','JC006','JC053','JC020','JC015','JC021','JC042','JC009','JC004','JC003','JC044','JC012'];
+// day idx: 0=จ 1=อ 2=พ 3=พฤ 4=ศ 5=ส 6=อา · สั่งก่อน 23:59
+const CTI_SLOTS1=[{order:1,cutoff:'23:59',deliver:5},{order:3,cutoff:'23:59',deliver:1},{order:6,cutoff:'23:59',deliver:3}]; // ส่ง ส/อ/พฤ
+const CTI_SLOTS2=[{order:2,cutoff:'23:59',deliver:0},{order:3,cutoff:'23:59',deliver:2},{order:0,cutoff:'23:59',deliver:4}]; // ส่ง จ/พ/ศ
+function applyCTIRounds(db){
+  // ล้างรอบของแห้งตัวอย่าง (WH001/WH002) ออกจากทุกสาขาก่อน
+  db.branches.forEach(b=>{ b.rounds=(b.rounds||[]).filter(r=>r.category!=='dry'); });
+  const set=(codes,slots)=>codes.forEach(code=>{const b=db.branches.find(x=>x.code===code);if(!b)return;
+    b.rounds.unshift({id:uid('r'),category:'dry',warehouse:'WH001',freshType:'',product:'ของแห้ง (คลัง CTI)',slots:slots.map(s=>({...s}))});
+  });
+  set(CTI_ROUTE1,CTI_SLOTS1); set(CTI_ROUTE2,CTI_SLOTS2);
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
+  if(DB){ if(!DB.meta)DB.meta={}; if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; } }
 }
 
 function buildSeedRounds(days){
