@@ -27,7 +27,13 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .hidden{display:none!important}
 
 /* layout */
-.topbar{background:var(--jc-ink);color:#fff;display:flex;align-items:center;gap:1.2rem;padding:.7rem 1.2rem;position:sticky;top:0;z-index:50}
+.topbar{background:var(--jc-ink);color:#fff;display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1.2rem;padding:.7rem 1.2rem;position:sticky;top:0;z-index:50}
+@media(max-width:640px){
+  .topbar{gap:.5rem .7rem;padding:.6rem .8rem}
+  .topbar .spacer{display:none}
+  .who{order:2;margin-left:auto}
+  .nav{order:3;width:100%;margin-left:0}
+}
 .brand{display:flex;align-items:center;gap:.6rem}
 .brand .emblem{width:34px;height:34px;color:var(--jc-gold)}
 .brand .wm{font-family:var(--jc-font-head);font-weight:700;letter-spacing:.18em;font-size:1.05rem}
