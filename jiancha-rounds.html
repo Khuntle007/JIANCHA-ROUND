@@ -120,8 +120,10 @@ th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-tr
 .pinkey:active{background:var(--jc-gold);color:var(--jc-ink)}
 .pindot{width:14px;height:14px;border-radius:50%;border:2px solid var(--jc-stone);display:inline-block}
 .pindot.on{background:var(--jc-ink);border-color:var(--jc-ink)}
-table.permtbl th{text-align:center;font-size:.62rem;white-space:nowrap;padding:.45rem .35rem;vertical-align:bottom}
-table.permtbl td{text-align:center;padding:.45rem .35rem}
+table.permtbl{width:100%;border-collapse:collapse}
+table.permtbl th{text-align:center;font-size:.62rem;white-space:nowrap;padding:.5rem .35rem;vertical-align:bottom;border-bottom:1px solid rgba(84,83,81,.22)}
+table.permtbl td{text-align:center;padding:.5rem .35rem;vertical-align:middle;border-bottom:1px solid rgba(84,83,81,.12)}
+table.permtbl tbody tr:last-child td{border-bottom:0}
 table.permtbl tr.inactive{opacity:.5}
 .permcell{width:17px;height:17px;cursor:pointer;accent-color:var(--jc-gold)}
 .scopebox .u_perm{accent-color:var(--jc-gold)}
@@ -1214,17 +1216,19 @@ function historyModal(b){
 function usersWithManage(){return DB.users.filter(z=>z.perms&&z.perms.manageUsers)}
 function renderUsers(main,u){
   if(!can('manageUsers')){main.innerHTML=`<div class="card"><div class="empty th">คุณไม่มีสิทธิ์จัดการผู้ใช้</div></div>`;return}
+  const canEdit = u.role==='MAIN ADMIN'; // แก้สิทธิ์ผู้ใช้ได้เฉพาะ MAIN ADMIN เท่านั้น
   main.innerHTML=`
     <div class="pagehead"><div><div class="kicker">การจัดการสิทธิ์</div><h1>ผู้ใช้ &amp; สิทธิ์เข้าถึง</h1></div>
-      <button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button></div>
+      ${canEdit?'<button class="btn gold" id="addUser">+ เพิ่มผู้ใช้</button>':''}</div>
     <div class="card" style="padding:0"><div class="tblwrap"><table class="permtbl">
       <thead><tr><th style="text-align:left">ผู้ใช้</th>${FEATURES.map(f=>`<th title="${esc(f.label)}">${esc(f.short)}</th>`).join('')}<th></th></tr></thead>
       <tbody>${DB.users.map(x=>`<tr class="${x.active===false?'inactive':''}">
         <td style="text-align:left;white-space:nowrap"><b class="th">${esc(x.name)}</b><div class="small muted">${esc(x.role)}${x.pin?'':' · <span style="color:var(--jc-gold)">ยังไม่ตั้ง PIN</span>'}${x.active===false?' · ปิดใช้งาน':''}</div></td>
-        ${FEATURES.map(f=>`<td><input type="checkbox" class="permcell" data-uid="${x.id}" data-perm="${f.key}" ${x.perms&&x.perms[f.key]?'checked':''}></td>`).join('')}
-        <td class="row" style="flex-wrap:nowrap"><button class="btn sm ghost" data-eu="${x.id}">แก้</button><button class="btn sm ghost" data-du="${x.id}">ลบ</button></td>
+        ${FEATURES.map(f=>`<td><input type="checkbox" class="permcell" data-uid="${x.id}" data-perm="${f.key}" ${x.perms&&x.perms[f.key]?'checked':''} ${canEdit?'':'disabled'}></td>`).join('')}
+        <td style="white-space:nowrap">${canEdit?`<div class="row" style="flex-wrap:nowrap;justify-content:flex-end;gap:.4rem"><button class="btn sm ghost" data-eu="${x.id}">แก้</button><button class="btn sm ghost" data-du="${x.id}">ลบ</button></div>`:''}</td>
       </tr>`).join('')}</tbody></table></div></div>
-    <div class="small muted th" style="margin-top:.6rem">ติ๊กเพื่อกำหนดสิทธิ์แต่ละฟังก์ชันของผู้ใช้ (บันทึกอัตโนมัติ) · ค่าเริ่มต้นเมื่อเลือกบทบาท: <b>MAIN ADMIN/SCM Manager/WH ADMIN/PCM ADMIN</b> = ทุกฟังก์ชัน · <b>Operation</b> = ดูปฏิทิน/สาขา/ออเดอร์ + แชร์</div>`;
+    <div class="small muted th" style="margin-top:.6rem">${canEdit?'ติ๊กเพื่อกำหนดสิทธิ์แต่ละฟังก์ชันของผู้ใช้ (บันทึกอัตโนมัติ) · ค่าเริ่มต้นเมื่อเลือกบทบาท: <b>MAIN ADMIN/SCM Manager/WH ADMIN/PCM ADMIN</b> = ทุกฟังก์ชัน · <b>Operation</b> = ดูปฏิทิน/สาขา/ออเดอร์ + แชร์':'🔒 อ่านอย่างเดียว — เฉพาะ <b>MAIN ADMIN</b> เท่านั้นที่แก้สิทธิ์ผู้ใช้ได้'}</div>`;
+  if(!canEdit) return; // คนอื่นดูได้อย่างเดียว ไม่ผูกปุ่ม/ช่องแก้ไข
   $('#addUser').onclick=()=>userModal(null);
   $$('[data-eu]').forEach(el=>el.onclick=()=>userModal(DB.users.find(z=>z.id===el.dataset.eu)));
   $$('[data-du]').forEach(el=>el.onclick=()=>{
