@@ -60,6 +60,9 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .btn.gold{background:var(--jc-gold);border-color:var(--jc-gold);color:var(--jc-ink)}
 .btn.gold:hover{background:transparent;color:#8a7b60}
 .btn.ghost{background:transparent;color:var(--jc-ink)}
+/* logout sits on the dark topbar — ghost's ink text would be black-on-black (invisible); force a light outline */
+#logoutBtn{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+#logoutBtn:hover{background:#fff;color:var(--jc-ink);border-color:#fff}
 .btn.sm{padding:.32em .7em;font-size:.68rem}
 .btn.danger{border-color:var(--bad);background:var(--bad)} .btn.danger:hover{color:var(--bad);background:transparent}
 .row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
