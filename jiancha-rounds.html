@@ -351,8 +351,12 @@ const FR_MALEE={JC001:"1111100",JC002:"1001000",JC003:"1111100",JC004:"1111100",
 const FR_MEJI={JC026:"0101010",JC004:"0101010",JC044:"0101010",JC034:"0101010"};
 const FR_VIP={JC001:"1101000",JC002:"1101000",JC003:"1101000",JC004:"1101000",JC005:"1101000",JC006:"1101000",JC007:"1101000",JC008:"1101000",JC009:"1101000",JC010:"1101000",JC012:"1101000",JC013:"1101000",JC014:"1101000",JC015:"1101000",JC016:"1101000",JC017:"1101000",JC018:"1101000",JC019:"1101000",JC020:"1101000",JC021:"1101000",JC022:"1101000",JC023:"1101000",JC024:"1101000",JC025:"1101000",JC026:"1101000",JC027:"1101000",JC028:"1101000",JC029:"1101000",JC030:"1101000",JC031:"1101000",JC032:"1101000",JC033:"1101000",JC034:"1101000",JC035:"1101000",JC037:"1101000",JC038:"1101000",JC039:"1101000",JC040:"1101000",JC041:"1101000",JC042:"1101000",JC043:"1010100",JC044:"1101000",JC045:"1101000",JC046:"1101000",JC047:"1101000",JC048:"0000010",JC049:"1101000",JC050:"1101000",JC051:"1101000",JC052:"1111110",JC053:"1101000",JC054:"1101000",JC055:"1101000",JC056:"1101000",JC057:"1101000",JC058:"1101000",JC059:"1101000",JC060:"1101000",JC061:"1101000"};
 const FR_YOGURT={JC030:"1010000",JC034:"0001100",JC014:"1010000",JC003:"1010000",JC012:"1010000",JC004:"1010000",JC026:"1010000",JC008:"1010000",JC002:"0001100",JC009:"1010000",JC017:"0001100",JC018:"1010000",JC019:"1010000",JC021:"1010000",JC022:"1010000",JC024:"1010000",JC023:"1010000",JC020:"1010000",JC005:"1010000",JC015:"1010000",JC013:"1010000",JC010:"0001100",JC016:"0001100",JC025:"0001100",JC052:"0101000",JC027:"1010000",JC028:"0001100",JC029:"0001100",JC007:"1010000",JC006:"0001100",JC031:"1001000",JC033:"1010000",JC032:"0101000",JC035:"1010000",JC044:"1010000",JC043:"0101100",JC045:"0101100",JC056:"0101100",JC037:"0101100",JC041:"1010000",JC047:"1010000",JC048:"0001000",JC053:"1010000",JC054:"1010000",JC055:"1010000",JC046:"1010000",JC051:"0101100",JC038:"1010000",JC050:"0101100",JC049:"1010000",JC042:"1010000",JC057:"1010000",JC058:"1010000",JC059:"0101100",JC060:"0101100",JC061:"1010100"};
-function fSlotsDeliver(pat){const o=[];for(let d=0;d<7;d++)if(pat[d]==='1')o.push({order:(d+6)%7,cutoff:'12:00',deliver:d});return o;}
-function fSlotsOrder(pat){const o=[];for(let x=0;x<7;x++)if(pat[x]==='1')o.push({order:x,cutoff:'12:00',deliver:(x+1)%7});return o;}
+// วันสั่งของรอบที่อิง "วันส่ง": ปกติสั่งก่อนส่ง 1 วัน — ถ้าตกวันอาทิตย์ (เช่น ส่งวันจันทร์) เลื่อนมาสั่งวันศุกร์ (ข้ามเสาร์-อาทิตย์)
+function orderDayFor(deliver){let o=(deliver+6)%7; if(o===6)o=4; return o;}
+// วันส่งของรอบที่อิง "วันสั่ง": ปกติส่งหลังสั่ง 1 วัน — ถ้าตกเสาร์/อาทิตย์ (เช่น สั่งวันศุกร์) เลื่อนไปส่งวันจันทร์
+function deliverDayFor(order){let d=(order+1)%7; if(d===5||d===6)d=0; return d;}
+function fSlotsDeliver(pat){const o=[];for(let d=0;d<7;d++)if(pat[d]==='1')o.push({order:orderDayFor(d),cutoff:'12:00',deliver:d});return o;}
+function fSlotsOrder(pat){const o=[];for(let x=0;x<7;x++)if(pat[x]==='1')o.push({order:x,cutoff:'12:00',deliver:deliverDayFor(x)});return o;}
 function applyFreshRounds(db){
   const REG_PY=['JC052','JC048'];            // พัทยา/ระยอง (ผลไม้)
   const REG_PYN=['JC052','JC048','JC049'];   // พัทยา/ระยอง/นครปฐม (ไอซ์ฮอต)
@@ -399,6 +403,15 @@ function fillDefaultRounds(db){
     if(!hasFresh('วิปปิ้งครีม & ครีมชีส')) b.rounds.push({id:uid('r'),category:'fresh',warehouse:'',freshType:'วิปปิ้งครีม & ครีมชีส',product:'วิปปิ้งครีม / ครีมชีส'+REVIEW_MARK,review:true,slots:fSlotsDeliver('1101000')});
   });
 }
+// แก้ตรรกะข้ามสุดสัปดาห์ให้ "ของสด" ที่เคยบันทึกไว้ (รอบเก่าคำนวณ สั่ง=ส่ง−1 / ส่ง=สั่ง+1 แบบตายตัว จึงมีสั่งวันอาทิตย์/ส่งวันเสาร์ที่ผิด)
+function fixFreshWeekend(db){
+  const DELIVER_BASED=['นมสด','วิปปิ้งครีม & ครีมชีส'];
+  (db.branches||[]).forEach(b=>(b.rounds||[]).forEach(r=>{
+    if(r.category!=='fresh'||!Array.isArray(r.slots))return;
+    if(DELIVER_BASED.includes(r.freshType)) r.slots.forEach(s=>{ s.order=orderDayFor(s.deliver); });
+    else if(r.freshType==='โยเกิร์ต') r.slots.forEach(s=>{ s.deliver=deliverDayFor(s.order); });
+  }));
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
@@ -407,6 +420,7 @@ function migrateDB(){
     if(!DB.meta.ctiV1){ applyCTIRounds(DB); DB.meta.ctiV1=true; }
     if(!DB.meta.haviV1){ applyHaviRounds(DB); DB.meta.haviV1=true; }
     if(!DB.meta.fillV1){ fillDefaultRounds(DB); DB.meta.fillV1=true; }
+    if(!DB.meta.freshV2){ fixFreshWeekend(DB); DB.meta.freshV2=true; }
   }
 }
 
