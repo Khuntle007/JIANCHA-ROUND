@@ -392,7 +392,7 @@ function applyHaviRounds(db){
   });
 }
 /* เติมรอบมาตรฐานให้สาขาที่ต้นฉบับไม่ได้ระบุ (ทำเครื่องหมาย ⚠️รอตรวจสอบ) */
-const REVIEW_MARK=' ⚠️รอตรวจสอบ';
+const REVIEW_MARK='';
 function fillDefaultRounds(db){
   db.branches.forEach(b=>{
     const hasDry=w=>b.rounds.some(r=>r.category==='dry'&&r.warehouse===w);
@@ -432,6 +432,13 @@ function stripDryParen(db){
     if(r.category==='dry'&&typeof r.product==='string') r.product=r.product.replace(/\s*\([^)]*\)/,'');
   }));
 }
+// เอาเครื่องหมาย "⚠️รอตรวจสอบ" ออกจากชื่อสินค้าทุกรายการ (และล้าง flag review)
+function stripReviewMark(db){
+  (db.branches||[]).forEach(b=>(b.rounds||[]).forEach(r=>{
+    if(typeof r.product==='string') r.product=r.product.replace(/\s*⚠️\s*รอตรวจสอบ/g,'').trim();
+    if(r.review) delete r.review;
+  }));
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
@@ -444,6 +451,7 @@ function migrateDB(){
     if(!DB.meta.freshV3){ fixFruitSunday(DB); DB.meta.freshV3=true; }
     if(!DB.meta.freshV4){ fixFruitWeekdays(DB); DB.meta.freshV4=true; }
     if(!DB.meta.dryNamesV1){ stripDryParen(DB); DB.meta.dryNamesV1=true; }
+    if(!DB.meta.reviewMarkV1){ stripReviewMark(DB); DB.meta.reviewMarkV1=true; }
   }
 }
 
