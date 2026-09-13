@@ -371,7 +371,7 @@ function applyFreshRounds(db){
     // ผลไม้ (แยกภาค)
     const fruit = REG_PY.includes(b.code)
       ? [{order:5,cutoff:'12:00',deliver:0},{order:2,cutoff:'12:00',deliver:3},{order:3,cutoff:'12:00',deliver:4}]
-      : [0,1,2,3,4,5,6].map(d=>({order:d,cutoff:'12:00',deliver:(d+1)%7})); // กทม/ปริมณฑล = สั่งทุกวัน ส่งวันถัดไป
+      : [0,1,2,3,4,5,6].map(d=>({order:d,cutoff:'12:00',deliver:(d+1)%7})).filter(s=>s.deliver!==6); // กทม/ปริมณฑล = สั่งทุกวัน ส่งวันถัดไป (ส่งถึงเสาร์ ไม่ส่งวันอาทิตย์)
     add('ผลไม้','ผลไม้สด',fruit);
     // ไอซ์ฮอต (แยกภาค)
     const ice = REG_PYN.includes(b.code)
@@ -412,6 +412,12 @@ function fixFreshWeekend(db){
     else if(r.freshType==='โยเกิร์ต') r.slots.forEach(s=>{ s.deliver=deliverDayFor(s.order); });
   }));
 }
+// ผลไม้ BKK/ปริมณฑล: ส่งถึงเสาร์เท่านั้น (ไม่ส่งวันอาทิตย์) — เอา slot ที่ส่งวันอาทิตย์ออกจากข้อมูลเก่า (พัทยา/ระยองไม่มีอยู่แล้ว จึงไม่กระทบ)
+function fixFruitSunday(db){
+  (db.branches||[]).forEach(b=>(b.rounds||[]).forEach(r=>{
+    if(r.category==='fresh'&&r.freshType==='ผลไม้'&&Array.isArray(r.slots)) r.slots=r.slots.filter(s=>s.deliver!==6);
+  }));
+}
 function migrateDB(){
   if(DB&&DB.branches)DB.branches.forEach(b=>{(b.rounds||[]).forEach(migrateRound)});
   if(DB&&DB.users)DB.users.forEach(u=>{if(u.active===undefined)u.active=true;if(!u.perms||typeof u.perms!=='object')u.perms=defaultPermsForRole(u.role);});
@@ -421,6 +427,7 @@ function migrateDB(){
     if(!DB.meta.haviV1){ applyHaviRounds(DB); DB.meta.haviV1=true; }
     if(!DB.meta.fillV1){ fillDefaultRounds(DB); DB.meta.fillV1=true; }
     if(!DB.meta.freshV2){ fixFreshWeekend(DB); DB.meta.freshV2=true; }
+    if(!DB.meta.freshV3){ fixFruitSunday(DB); DB.meta.freshV3=true; }
   }
 }
 
