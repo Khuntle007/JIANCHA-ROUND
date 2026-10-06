@@ -192,6 +192,32 @@ function itemForLine(name) {
   return hit ? hit.key : OTHER_KEY;
 }
 
+/* ---------------- PO report (one row per PO line) ---------------- */
+const bkkDay = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+function buildReport(params, scope) {
+  const lab = k => (DB.items.find(i => i.key === k) || {}).label || k;
+  const from = cleanStr(params.get('from'), 10), to = cleanStr(params.get('to'), 10);
+  const branch = cleanStr(params.get('branch'), 120), item = cleanStr(params.get('item'), 40), account = cleanStr(params.get('account'), 40);
+  const q = cleanStr(params.get('q'), 80).toLowerCase();
+  const rows = [], branches = new Set();
+  for (const d of scope.slice().reverse()) {
+    if (d.branchName) branches.add(d.branchName);
+    const day = bkkDay(d.createdAt);
+    if ((from && day < from) || (to && day > to) || (branch && d.branchName !== branch) || (item && d.item !== item) || (account && d.accountId !== account)) continue;
+    const po = d.po, lines = po && po.lines && po.lines.length ? po.lines : [null];
+    for (const l of lines) {
+      const r = {
+        createdAt: d.createdAt, day, ref: d.ref, poNumber: po ? po.number : '', branch: d.branchName, itemKey: d.item, itemLabel: lab(d.item),
+        issuedDate: po ? po.issuedDate : '', issuer: d.issuerName, account: d.accountName || d.username, emailStatus: (d.email || {}).status || '',
+        hasDetail: !!l, no: l ? l.no : '', product: l ? l.name : '', qty: l ? l.qty : null, unit: l ? l.unit : '', vat: l ? l.vat : '', price: l ? l.price : null, total: l ? l.total : null,
+      };
+      if (q && ![r.poNumber, r.ref, r.product, r.branch].some(x => String(x).toLowerCase().includes(q))) continue;
+      rows.push(r);
+    }
+  }
+  return { rows: rows.slice(0, 5000), truncated: rows.length > 5000, branches: [...branches].sort(), items: DB.items.map(i => ({ key: i.key, label: i.label })) };
+}
+
 /* ---------------- mail (Microsoft Graph) ---------------- */
 let graphTok = { tok: null, exp: 0 };
 async function graphToken() {
@@ -365,6 +391,9 @@ async function handle(req, res) {
     if (M === 'GET' && seg[1] === 'drops') {
       return send(res, 200, { drops: DB.drops.filter(d => d.accountId === a.id).slice(-200).reverse().map(pubDrop) });
     }
+    if (M === 'GET' && seg[1] === 'report') {
+      return send(res, 200, buildReport(u.searchParams, DB.drops.filter(d => d.accountId === a.id)));
+    }
     if (M === 'POST' && seg[1] === 'drops') {
       let fileName = cleanStr(u.searchParams.get('filename'), 150).replace(/[\\/:*?"<>|]/g, '_') || 'order.pdf';
       if (!/\.pdf$/i.test(fileName)) fileName += '.pdf';
@@ -422,6 +451,9 @@ async function handle(req, res) {
     if (!canUseDrop(user)) return send(res, 403, { error: 'no Order Drop permission' });
     const actor = user.name;
 
+    if (M === 'GET' && seg[1] === 'report') {
+      return send(res, 200, { ...buildReport(u.searchParams, DB.drops), accounts: DB.accounts.map(x => ({ id: x.id, name: x.name, username: x.username })) });
+    }
     if (M === 'GET' && seg[1] === 'overview') {
       return send(res, 200, {
         drops: DB.drops.slice().reverse().map(pubDrop), accounts: DB.accounts.map(pubAccount), items: DB.items,
