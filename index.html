@@ -72,6 +72,18 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .field label{font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--jc-stone);font-family:var(--jc-font-head)}
 .field input,.field select,.field textarea{padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--jc-gold);outline-offset:-1px}
+.pside-layout{display:flex;gap:1.5rem;align-items:flex-start}
+.pside{width:160px;flex:none;position:sticky;top:76px;display:flex;flex-direction:column;gap:.2rem}
+.pside a{display:block;padding:.6rem .8rem;border-left:3px solid transparent;color:var(--jc-stone);font-family:var(--jc-font-thai);text-decoration:none}
+.pside a:hover{background:#ece9e1}
+.pside a.on{border-left-color:var(--jc-gold);background:#fff;color:var(--jc-ink);font-weight:700}
+.pmain{flex:1;min-width:0}
+@media(max-width:720px){.pside-layout{flex-direction:column;gap:.6rem}.pside{width:100%;position:static;flex-direction:row;overflow:auto}.pside a{border-left:0;border-bottom:3px solid transparent;white-space:nowrap}.pside a.on{border-bottom-color:var(--jc-gold)}}
+.rptbar{display:flex;flex-wrap:wrap;gap:.6rem .8rem;align-items:flex-end;margin-bottom:.9rem}
+.rptbar .field{margin:0}
+.rptsum{display:flex;gap:1.6rem;flex-wrap:wrap;margin-bottom:.8rem}
+.rptsum b{font-size:1.15rem;display:block}
+.rpt td.num,.rpt th.num{text-align:right;white-space:nowrap}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 1rem}
 @media(max-width:720px){.grid2,.grid3{grid-template-columns:1fr}}
@@ -1451,7 +1463,7 @@ function renderDrops(main,u){
 }
 function drawDrops(u){
   const d=DROP_VIEW.data, V=DROP_VIEW, body=$('#dropBody'); if(!body)return;
-  const tabs=[['drops',`ใบสั่งที่ได้รับ (${d.drops.length})`],['accounts',`บัญชีแฟรนไชส์ (${d.accounts.length})`],['routing','ผู้รับอีเมล']];
+  const tabs=[['drops',`ใบสั่งที่ได้รับ (${d.drops.length})`],['accounts',`บัญชีแฟรนไชส์ (${d.accounts.length})`],['report','รายงาน PO'],['routing','ผู้รับอีเมล']];
   body.innerHTML=`
     <div class="card" style="margin-bottom:1rem"><div class="kicker" style="margin-bottom:.4rem">ลิงก์ Portal สำหรับแฟรนไชส์</div>
       <div class="linkbox"><code>${esc(d.portalUrl)}</code><button class="btn sm" id="cpPortal">คัดลอกลิงก์</button><a class="btn sm ghost" href="${esc(d.portalUrl)}" target="_blank" rel="noopener">เปิด</a></div>
@@ -1461,7 +1473,7 @@ function drawDrops(u){
   $('#cpPortal').onclick=()=>copyText(d.portalUrl);
   $$('[data-tab]').forEach(b=>b.onclick=()=>{V.tab=b.dataset.tab;drawDrops(u)});
   const tab=$('#dropTab');
-  if(V.tab==='drops')drawDropList(tab,u); else if(V.tab==='accounts')drawAccounts(tab,u); else drawRouting(tab,u);
+  if(V.tab==='drops')drawDropList(tab,u); else if(V.tab==='accounts')drawAccounts(tab,u); else if(V.tab==='report'){RPT.data=null;RPT.busy=false;renderReport(tab,{admin:true,fetch:qs=>dropFetch('/admin/report?'+qs,{},S.dropToken)})} else drawRouting(tab,u);
 }
 function drawDropList(tab,u){
   const d=DROP_VIEW.data, V=DROP_VIEW;
@@ -1582,10 +1594,13 @@ function drawRouting(tab,u){
 let PORTAL={tok:null,me:null,drops:[],file:null,busy:false};
 function portalLoad(){try{PORTAL.tok=JSON.parse(localStorage.getItem(PORTAL_KEY)||'{}').token||null}catch(e){PORTAL.tok=null}}
 function portalSave(t){PORTAL.tok=t;try{t?localStorage.setItem(PORTAL_KEY,JSON.stringify({token:t})):localStorage.removeItem(PORTAL_KEY)}catch(e){}}
-function portalShell(inner,who){return `
+function portalShell(inner,who,page){
+  const wide=page==='report';
+  const body=who?`<div class="pside-layout"><nav class="pside"><a href="#/drop" class="${page==='report'?'':'on'}">ส่งใบสั่ง</a><a href="#/drop/report" class="${page==='report'?'on':''}">รายงาน PO</a></nav><div class="pmain" style="${wide?'':'max-width:820px'}">${inner}</div></div>`:inner;
+  return `
   <div class="topbar"><div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ORDER DROP · FRANCHISE</small></div></div><div class="spacer"></div>
     ${who?`<div class="who"><span class="th">${esc(who)}</span><button class="btn sm ghost" id="pOut">ออกจากระบบ</button></div>`:''}</div>
-  <div class="wrap" style="max-width:820px">${inner}<div class="foot">JIANCHA · External Order Drop — ระบบรับใบสั่งซื้อจากแฟรนไชส์</div></div>`}
+  <div class="wrap" style="max-width:${who?'1240px':'820px'}">${body}<div class="foot">JIANCHA · External Order Drop — ระบบรับใบสั่งซื้อจากแฟรนไชส์</div></div>`}
 function renderPortal(){
   document.title='JIANCHA · Order Drop';
   portalLoad();
@@ -1613,6 +1628,7 @@ function renderPortalLogin(){
 }
 function drawPortal(){
   const me=PORTAL.me, P=PORTAL;
+  if(parseHash().parts[1]==='report')return drawPortalReport();
   $('#app').innerHTML=portalShell(`
     <div class="pagehead"><div><div class="kicker">Order Drop</div><h1 class="th">ส่งใบสั่งซื้อ</h1></div></div>
     <form class="card" id="pForm">
@@ -1654,6 +1670,61 @@ function drawPortal(){
       if(err.status===401){portalSave(null);PORTAL.me=null;renderPortal();return}
       $('#fMsg').textContent='ส่งไม่สำเร็จ: '+err.message;}
   };
+}
+
+
+/* ---------- PO report (shared by franchise portal + back office) ---------- */
+let RPT={f:{from:'',to:'',branch:'',item:'',q:'',account:''},data:null,busy:false};
+const fmtMoney=n=>n==null||n===''?'':Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function rptDay(iso){return new Date(iso).toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit',timeZone:'Asia/Bangkok'})}
+function renderReport(el,opt){
+  const f=RPT.f, d=RPT.data;
+  const rows=d?d.rows:[];
+  const pos=new Set(rows.filter(r=>r.poNumber).map(r=>r.poNumber)).size;
+  const sum=rows.reduce((x,r)=>x+(+r.total||0),0);
+  const sel=(id,label,val,opts)=>`<div class="field"><label>${label}</label><select id="${id}"><option value="">ทั้งหมด</option>${opts.map(o=>`<option value="${esc(o[0])}" ${val===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>`;
+  el.innerHTML=`
+    <div class="card" style="margin-bottom:1rem"><div class="rptbar">
+      <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rf_from" value="${esc(f.from)}"></div>
+      <div class="field"><label>ถึงวันที่</label><input type="date" id="rf_to" value="${esc(f.to)}"></div>
+      ${sel('rf_branch','สาขา (จาก PO)',f.branch,(d?d.branches:[]).map(b=>[b,b]))}
+      ${sel('rf_item','ประเภทสินค้า',f.item,(d?d.items:[]).map(i=>[i.key,i.label]))}
+      ${opt.admin?sel('rf_account','บัญชีแฟรนไชส์',f.account,(d&&d.accounts||[]).map(a=>[a.id,a.name+' ('+a.username+')'])):''}
+      <div class="field"><label>ค้นหา (เลข PO / สินค้า)</label><input id="rf_q" value="${esc(f.q)}" placeholder="เช่น PO2026… หรือ Yogurt"></div>
+      <div class="field"><button class="btn gold" id="rf_go">ค้นหา</button></div>
+      <div class="field"><button class="btn ghost" id="rf_clear" type="button">ล้างตัวกรอง</button></div>
+      <div class="field"><button class="btn ghost" id="rf_csv" type="button" ${rows.length?'':'disabled'}>ดาวน์โหลด Excel (CSV)</button></div>
+    </div>
+    <div class="rptsum th"><div class="muted small">จำนวน PO</div><div class="muted small">จำนวนรายการ</div><div class="muted small">ยอดรวม (บาท)</div></div></div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table class="rpt"><thead><tr><th>วันที่ส่ง</th><th>PO / Ref</th><th>สาขา (จาก PO)</th><th>ประเภท</th><th>รายการสินค้า</th><th class="num">จำนวน</th><th>หน่วย</th><th class="num">ราคา</th><th class="num">รวม</th><th>ผู้ออกใบสั่ง</th>${opt.admin?'<th>บัญชี</th>':''}</tr></thead>
+    <tbody>${!d?`<tr><td colspan="11"><div class="empty th">กำลังโหลด…</div></td></tr>`:rows.length?rows.map(r=>`<tr><td class="small" style="white-space:nowrap">${rptDay(r.createdAt)}</td><td><b>${esc(r.poNumber||'—')}</b><div class="small muted">${esc(r.ref)}</div></td><td class="th">${esc(r.branch)}</td><td>${esc(r.itemLabel)}</td>
+      <td class="th">${r.hasDetail?esc(r.product):'<span class="muted small">ไม่มีรายละเอียด PO (ส่งก่อนระบบอ่าน PO)</span>'}</td><td class="num">${r.qty==null?'':esc(r.qty)}</td><td>${esc(r.unit)}</td><td class="num">${fmtMoney(r.price)}</td><td class="num">${fmtMoney(r.total)}</td><td class="th">${esc(r.issuer)}</td>${opt.admin?`<td class="small">${esc(r.account)}</td>`:''}</tr>`).join(''):`<tr><td colspan="11"><div class="empty th">ไม่พบข้อมูลตามตัวกรอง</div></td></tr>`}</tbody></table></div></div>
+    ${d&&d.truncated?'<div class="small muted th" style="margin-top:.5rem">แสดง 5,000 รายการแรก — ใช้ตัวกรองเพื่อจำกัดข้อมูล</div>':''}`;
+  // summary numbers (rendered after to keep markup simple)
+  const sm=el.querySelector('.rptsum');
+  sm.innerHTML=`<div><div class="muted small th">จำนวน PO</div><b>${pos}</b></div><div><div class="muted small th">จำนวนรายการสินค้า</div><b>${rows.filter(r=>r.hasDetail).length}</b></div><div><div class="muted small th">ยอดรวม (บาท)</div><b>${fmtMoney(sum)}</b></div>`;
+  const read=()=>{f.from=$('#rf_from').value;f.to=$('#rf_to').value;f.branch=$('#rf_branch').value;f.item=$('#rf_item').value;f.q=$('#rf_q').value.trim();if(opt.admin)f.account=$('#rf_account').value};
+  const load=()=>{read();RPT.data=null;RPT.busy=false;renderReport(el,opt)};
+  $('#rf_go').onclick=load;
+  $('#rf_q').onkeydown=e=>{if(e.key==='Enter')load()};
+  $('#rf_clear').onclick=()=>{RPT.f={from:'',to:'',branch:'',item:'',q:'',account:''};load()};
+  $('#rf_csv').onclick=()=>{
+    const head=['วันที่ส่ง','Ref','PO','สาขา (จาก PO)','ประเภท','วันที่ออก PO','ลำดับ','รายการสินค้า','จำนวน','หน่วย','VAT','ราคา','รวม','ผู้ออกใบสั่ง','บัญชี'];
+    const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const csv='﻿'+[head,...rows.map(r=>[r.day,r.ref,r.poNumber,r.branch,r.itemLabel,r.issuedDate,r.no,r.product,r.qty,r.unit,r.vat,r.price,r.total,r.issuer,r.account])].map(l=>l.map(q).join(',')).join('\r\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='po-report-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();
+  };
+  if(!d&&!RPT.busy){RPT.busy=true;
+    const qs=new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([k,v])=>v)));
+    opt.fetch(qs.toString()).then(j=>{RPT.busy=false;RPT.data=j;renderReport(el,opt)}).catch(e=>{RPT.busy=false;if(opt.on401&&e.status===401)return opt.on401();el.innerHTML=`<div class="card"><div class="empty th">โหลดรายงานไม่ได้ <span class="small muted">(${esc(e.message)})</span></div></div>`});
+  }
+}
+function drawPortalReport(){
+  const me=PORTAL.me;
+  $('#app').innerHTML=portalShell(`<div class="pagehead"><div><div class="kicker">Report</div><h1 class="th">รายงาน PO</h1><div class="muted th small">รายละเอียดสินค้าใน PO ที่ส่งแล้ว เลือกดูตามวันที่และสาขาได้</div></div></div><div id="rptBox"></div>`,me.account.name+' · '+me.account.username,'report');
+  $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};RPT.data=null;location.hash='#/drop';renderPortal()};
+  RPT.data=null;RPT.busy=false;
+  renderReport($('#rptBox'),{admin:false,fetch:qs=>dropFetch('/portal/report?'+qs,{},PORTAL.tok),on401:()=>{portalSave(null);PORTAL.me=null;renderPortal()}});
 }
 
 /* ---------- boot ---------- */
