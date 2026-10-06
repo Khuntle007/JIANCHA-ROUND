@@ -72,18 +72,6 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .field label{font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;color:var(--jc-stone);font-family:var(--jc-font-head)}
 .field input,.field select,.field textarea{padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--jc-gold);outline-offset:-1px}
-.msel{position:relative}
-.msel-btn{width:100%;text-align:left;padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff;cursor:pointer;display:flex;justify-content:space-between;gap:.5rem;font:inherit}
-.msel-btn .ph{color:#999}
-.msel-panel{position:absolute;z-index:30;left:0;right:0;top:100%;margin-top:2px;background:#fff;border:1px solid var(--jc-border);box-shadow:0 6px 18px rgba(0,0,0,.12);display:none}
-.msel.open .msel-panel{display:block}
-.msel-panel input[type=search]{width:calc(100% - 1rem);margin:.5rem;padding:.45em .6em;border:1px solid var(--jc-border);border-radius:var(--radius)}
-.msel-list{max-height:240px;overflow:auto}
-.msel-list label{display:flex;gap:.5rem;align-items:center;padding:.4rem .7rem;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.9rem;color:var(--jc-ink);font-family:inherit}
-.msel-list label:hover{background:#faf9f6}
-.msel-tools{display:flex;justify-content:space-between;padding:.2rem .7rem .4rem;font-size:.78rem}
-.msel-tools a{color:var(--jc-stone);cursor:pointer;text-decoration:underline}
-.field input[readonly]{background:#f1efe9;color:var(--jc-stone);cursor:not-allowed}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 1rem}
 @media(max-width:720px){.grid2,.grid3{grid-template-columns:1fr}}
@@ -1613,13 +1601,9 @@ function renderPortalLogin(){
 function drawPortal(){
   const me=PORTAL.me, P=PORTAL;
   $('#app').innerHTML=portalShell(`
-    <div class="pagehead"><div><div class="kicker">Order Drop</div><h1 class="th">ส่งใบสั่งซื้อ</h1><div class="muted th small">${esc(me.account.name)}</div></div></div>
+    <div class="pagehead"><div><div class="kicker">Order Drop</div><h1 class="th">ส่งใบสั่งซื้อ</h1></div></div>
     <form class="card" id="pForm">
-      <div class="grid2">
-        <div class="field"><label>สาขา (Branch) * <span class="muted">เลือกได้หลายสาขา</span></label><div class="msel" id="mB"></div></div>
-        <div class="field"><label>รายการ (Item) * <span class="muted">เลือกได้หลายรายการ</span></label><div class="msel" id="mI"></div></div>
-      </div>
-      <div class="field"><label>ชื่อผู้ออกใบสั่ง (Name of Order Issuer)</label><input id="fN" value="${esc(me.account.name)}" readonly tabindex="-1"></div>
+      <div class="small muted th" style="margin-bottom:.8rem">แนบไฟล์ใบ PO (PDF) จากระบบ PO — ระบบอ่านสาขา รายการสินค้า และผู้ออกใบสั่งจากไฟล์ให้อัตโนมัติ แล้วส่งอีเมลถึงซัพพลายเออร์</div>
       <div class="field"><label>ไฟล์ใบสั่ง (PDF) *</label>
         <div class="dropzone" id="fZ"><input type="file" id="fF" accept="application/pdf,.pdf" hidden><div id="fZt" class="th">ลากไฟล์ PDF มาวาง หรือ <u>คลิกเพื่อเลือกไฟล์</u><div class="small muted">สูงสุด ${fmtSize(me.maxBytes)}</div></div></div></div>
       <div id="fMsg" class="small th" style="min-height:1.2rem;color:var(--bad);margin:.3rem 0"></div>
@@ -1627,30 +1611,10 @@ function drawPortal(){
     </form>
     <div style="height:1.2rem"></div>
     <div class="kicker" style="margin-bottom:.5rem">ใบสั่งที่ส่งแล้ว</div>
-    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา</th><th>รายการ</th><th>ผู้สั่ง</th><th>สถานะ</th></tr></thead>
-      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b></td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td><td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา (จาก PO)</th><th>รายการ</th><th>ผู้สั่ง</th><th>สถานะ</th></tr></thead>
+      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b>${x.poNumber?`<div class="small muted">${esc(x.poNumber)}</div>`:''}</td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td><td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
     me.account.name+' · '+me.account.username);
   $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};renderPortal()};
-  const mkMsel=(el,opts,ph)=>{
-    const sel=new Set(); if(opts.length===1)sel.add(opts[0].v);
-    el.innerHTML=`<button type="button" class="msel-btn"><span class="lbl"></span><span>▾</span></button>
-      <div class="msel-panel"><input type="search" placeholder="ค้นหา…" autocomplete="off">
-        <div class="msel-tools"><a data-all>เลือกทั้งหมดที่ค้นเจอ</a><a data-none>ล้างที่เลือก</a></div><div class="msel-list"></div></div>`;
-    const btn=el.querySelector('.msel-btn'),q=el.querySelector('input'),list=el.querySelector('.msel-list');
-    const norm=t=>String(t).toLowerCase();
-    const shown=()=>opts.filter(o=>norm(o.t).includes(norm(q.value.trim())));
-    const label=()=>{const n=sel.size;el.querySelector('.lbl').innerHTML=n?(n<=2?opts.filter(o=>sel.has(o.v)).map(o=>esc(o.t)).join(', '):`เลือกแล้ว ${n} รายการ`):`<span class="ph">${ph}</span>`};
-    const draw=()=>{const r=shown();list.innerHTML=r.length?r.map(o=>`<label><input type="checkbox" value="${esc(o.v)}" ${sel.has(o.v)?'checked':''}> <span class="th">${esc(o.t)}</span></label>`).join(''):'<div class="empty th small" style="padding:.8rem">ไม่พบรายการ</div>';label()};
-    btn.onclick=()=>{el.classList.toggle('open');if(el.classList.contains('open'))q.focus()};
-    q.oninput=draw;
-    list.onchange=e=>{e.target.checked?sel.add(e.target.value):sel.delete(e.target.value);label()};
-    el.querySelector('[data-all]').onclick=()=>{shown().forEach(o=>sel.add(o.v));draw()};
-    el.querySelector('[data-none]').onclick=()=>{sel.clear();draw()};
-    document.addEventListener('click',e=>{if(!el.isConnected)return;if(!el.contains(e.target))el.classList.remove('open')});
-    draw(); return sel;
-  };
-  const selB=mkMsel($('#mB'),me.branches.map(b=>({v:b.code,t:b.name})),'— เลือกสาขา —');
-  const selI=mkMsel($('#mI'),me.items.map(i=>({v:i.key,t:i.label+(i.labelTh?' · '+i.labelTh:'')})),'— เลือกรายการ —');
   const z=$('#fZ'), f=$('#fF');
   const setFile=file=>{
     if(!file)return;
@@ -1662,26 +1626,16 @@ function drawPortal(){
   z.ondragover=e=>{e.preventDefault();z.classList.add('over')}; z.ondragleave=()=>z.classList.remove('over');
   z.ondrop=e=>{e.preventDefault();z.classList.remove('over');setFile(e.dataTransfer.files[0])};
   $('#pForm').onsubmit=async e=>{e.preventDefault(); if(P.busy)return;
-    const branches=[...selB],items=[...selI],issuer=me.account.name;
-    if(!branches.length||!items.length){$('#fMsg').textContent='เลือกสาขาและรายการอย่างน้อยอย่างละ 1';return}
     if(!P.file){$('#fMsg').textContent='กรุณาแนบไฟล์ PDF';return}
-    P.busy=true;const b=$('#fGo');b.disabled=true;
-    const combos=[];branches.forEach(br=>items.forEach(it=>combos.push([br,it])));
-    const done=[],failed=[];
+    P.busy=true;const b=$('#fGo');b.disabled=true;b.textContent='กำลังอ่านและส่ง…';
     try{
-      for(let n=0;n<combos.length;n++){
-        b.textContent=`กำลังส่ง ${n+1}/${combos.length}…`;
-        const [branch,item]=combos[n];
-        try{
-          const qs=new URLSearchParams({branch,item,issuer,filename:P.file.name});
-          const j=await dropFetch('/portal/drops?'+qs,{method:'POST',headers:{'Content-Type':'application/pdf'},body:P.file},PORTAL.tok);
-          P.drops.unshift(j.drop);done.push(j.drop);
-        }catch(err){if(err.status===401)throw err;failed.push(err.message)}
-      }
-      P.file=null;P.busy=false;drawPortal();
-      openModal(`<div class="modal" style="max-width:440px;text-align:center"><div style="font-size:2rem">${failed.length?'⚠':'✓'}</div><h2>${failed.length?'ส่งสำเร็จบางรายการ':'ส่งใบสั่งเรียบร้อย'}</h2>
-        <p class="th" style="margin:.6rem 0">ส่งสำเร็จ <b>${done.length}</b> จาก ${combos.length} รายการ${failed.length?`<br><span style="color:var(--bad)">ไม่สำเร็จ ${failed.length}: ${esc(failed[0])}</span>`:''}<br>
-        <span class="small muted">${done.map(d=>esc(d.ref)+' · '+esc(d.itemLabel)+' · '+esc(d.branchName)).join('<br>')}</span></p>
+      const qs=new URLSearchParams({filename:P.file.name});
+      const j=await dropFetch('/portal/drops?'+qs,{method:'POST',headers:{'Content-Type':'application/pdf'},body:P.file},PORTAL.tok);
+      const ds=j.drops||[j.drop];
+      ds.slice().reverse().forEach(d=>P.drops.unshift(d));P.file=null;P.busy=false;drawPortal();
+      openModal(`<div class="modal" style="max-width:440px;text-align:center"><div style="font-size:2rem">✓</div><h2>ส่งใบสั่งเรียบร้อย</h2>
+        <p class="th" style="margin:.6rem 0">PO <b>${esc(ds[0].poNumber||'')}</b> · ${esc(ds[0].branchName)}<br>
+        <span class="small muted">${ds.map(d=>esc(d.ref)+' · '+esc(d.itemLabel)).join('<br>')}</span></p>
         <button class="btn gold" onclick="closeModal()">ตกลง</button></div>`);
     }catch(err){P.busy=false;b.disabled=false;b.textContent='ส่งใบสั่ง';
       if(err.status===401){portalSave(null);PORTAL.me=null;renderPortal();return}
