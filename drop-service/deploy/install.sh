@@ -17,14 +17,14 @@ install -m 644 "$SRC/deploy/jc-round-drop.service" /etc/systemd/system/jc-round-
 systemctl daemon-reload; systemctl enable --now jc-round-drop; systemctl restart jc-round-drop
 sleep 1; curl -fsS http://127.0.0.1:8093/health; echo
 
-if ! grep -q 'location /api/drop/' "$VHOST"; then
+if ! grep -q 'location ^~ /api/drop/' "$VHOST"; then
   cp "$VHOST" "$VHOST.bak-$(date +%Y%m%d%H%M)"
   python3 - "$VHOST" "$SRC/deploy/nginx-location.conf" <<'PY'
 import sys,re
 v,snip=sys.argv[1],open(sys.argv[2]).read()
 s=open(v).read()
 block="\n".join(l for l in snip.splitlines() if not l.startswith('#'))
-i=s.find('location /api/')
+i=s.find('location /api/ {')
 assert i>0, 'no "location /api/" in vhost'
 s=s[:i]+block.strip()+"\n\n    "+s[i:]
 open(v,'w').write(s)
