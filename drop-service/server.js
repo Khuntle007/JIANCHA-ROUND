@@ -208,7 +208,7 @@ function buildReport(params, scope) {
     const po = d.po, lines = po && po.lines && po.lines.length ? po.lines : [null];
     for (const l of lines) {
       const r = {
-        createdAt: d.createdAt, day, ref: d.ref, poNumber: po ? po.number : '', branch: d.branchName, itemKey: d.item, itemLabel: lab(d.item),
+        dropId: d.id, fileName: d.fileName, createdAt: d.createdAt, day, ref: d.ref, poNumber: po ? po.number : '', branch: d.branchName, itemKey: d.item, itemLabel: lab(d.item),
         issuedDate: po ? po.issuedDate : '', issuer: d.issuerName, account: d.accountName || d.username, emailStatus: (d.email || {}).status || '',
         hasDetail: !!l, no: l ? l.no : '', product: l ? l.name : '', qty: l ? l.qty : null, unit: l ? l.unit : '', vat: l ? l.vat : '', price: l ? l.price : null, total: l ? l.total : null,
       };
@@ -336,7 +336,8 @@ const bearer = req => (req.headers.authorization || '').replace(/^Bearer\s+/i, '
 const clientIp = req => String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
 const cleanStr = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const emailOk = e => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e);
-function pubAccount(a) { return { id: a.id, username: a.username, name: a.name, branches: a.branches || [], active: a.active !== false, createdAt: a.createdAt, createdBy: a.createdBy, lastLoginAt: a.lastLoginAt || null }; }
+const canReport = a => !!a.portalAdmin || a.reportAccess !== false; // legacy accounts (field missing) keep report access
+function pubAccount(a) { return { id: a.id, username: a.username, name: a.name, branches: a.branches || [], active: a.active !== false, portalAdmin: !!a.portalAdmin, reportAccess: canReport(a), createdAt: a.createdAt, createdBy: a.createdBy, lastLoginAt: a.lastLoginAt || null }; }
 function pubDrop(d) { return { id: d.id, ref: d.ref, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, poNumber: d.po ? d.po.number : '', item: d.item, itemLabel: (DB.items.find(i => i.key === d.item) || {}).label || d.item, fileName: d.fileName, size: d.size, createdAt: d.createdAt, username: d.username, accountName: d.accountName, email: d.email || {} }; }
 const pubItems = () => DB.items.map(i => ({ key: i.key, label: i.label, labelTh: i.labelTh }));
 function streamPdf(res, drop, inline) {
@@ -389,11 +390,29 @@ async function handle(req, res) {
       const allowed = (a.branches || []).length ? all.filter(b => a.branches.includes(b.code)) : all;
       return send(res, 200, { account: pubAccount(a), branches: allowed, items: pubItems(), maxBytes: MAX_PDF });
     }
-    if (M === 'GET' && seg[1] === 'drops') {
+    if (M === 'GET' && seg[1] === 'drops' && !seg[2]) {
       return send(res, 200, { drops: DB.drops.filter(d => d.accountId === a.id).slice(-200).reverse().map(pubDrop) });
     }
     if (M === 'GET' && seg[1] === 'report') {
+      if (!canReport(a)) return send(res, 403, { error: 'ไม่มีสิทธิ์เข้าหน้ารายงาน' });
       return send(res, 200, buildReport(u.searchParams, DB.drops.filter(d => d.accountId === a.id)));
+    }
+    if (M === 'GET' && seg[1] === 'drops' && seg[2] && seg[3] === 'file') { // original PDF of one of this account's own drops
+      if (!canReport(a)) return send(res, 403, { error: 'ไม่มีสิทธิ์' });
+      const d = DB.drops.find(x => x.id === seg[2] && x.accountId === a.id);
+      return d ? streamPdf(res, d, false) : send(res, 404, { error: 'not found' });
+    }
+    if (seg[1] === 'access') { // franchise-side admins manage who can open the report page
+      if (!a.portalAdmin) return send(res, 403, { error: 'admin only' });
+      if (M === 'GET' && !seg[2]) return send(res, 200, { accounts: DB.accounts.filter(x => x.active !== false).map(x => ({ id: x.id, name: x.name, username: x.username, portalAdmin: !!x.portalAdmin, reportAccess: canReport(x) })) });
+      if (M === 'POST' && seg[2]) {
+        const t = DB.accounts.find(x => x.id === seg[2]);
+        if (!t) return send(res, 404, { error: 'not found' });
+        if (t.portalAdmin) return send(res, 400, { error: 'แอดมินเข้ารายงานได้เสมอ' });
+        const b = await readJson(req);
+        t.reportAccess = !!b.reportAccess; saveDb();
+        return send(res, 200, { id: t.id, reportAccess: canReport(t) });
+      }
     }
     if (M === 'POST' && seg[1] === 'drops') {
       let fileName = cleanStr(u.searchParams.get('filename'), 150).replace(/[\\/:*?"<>|]/g, '_') || 'order.pdf';
@@ -487,7 +506,7 @@ async function handle(req, res) {
       if (username && DB.accounts.some(x => x.username === username)) return send(res, 409, { error: 'username already exists' });
       username = username || genUsername();
       const password = genPassword();
-      const a = { id: id('x'), username, name, branches: Array.isArray(b.branches) ? b.branches.map(c => cleanStr(c, 32)).filter(Boolean) : [], active: true, createdAt: new Date().toISOString(), createdBy: actor, pwv: 0, ...hashPw(password) };
+      const a = { id: id('x'), username, name, branches: Array.isArray(b.branches) ? b.branches.map(c => cleanStr(c, 32)).filter(Boolean) : [], active: true, portalAdmin: !!b.portalAdmin, reportAccess: !!b.reportAccess, createdAt: new Date().toISOString(), createdBy: actor, pwv: 0, ...hashPw(password) };
       DB.accounts.push(a); saveDb();
       return send(res, 201, { account: pubAccount(a), password });
     }
@@ -502,6 +521,8 @@ async function handle(req, res) {
       const b = await readJson(req);
       if (b.name != null) a.name = cleanStr(b.name, 120) || a.name;
       if (Array.isArray(b.branches)) a.branches = b.branches.map(c => cleanStr(c, 32)).filter(Boolean);
+      if (b.portalAdmin != null) a.portalAdmin = !!b.portalAdmin;
+      if (b.reportAccess != null) a.reportAccess = !!b.reportAccess;
       if (b.active != null) { a.active = !!b.active; if (!a.active) a.pwv = (a.pwv || 0) + 1; }
       saveDb(); return send(res, 200, { account: pubAccount(a) });
     }
