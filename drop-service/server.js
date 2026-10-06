@@ -9,6 +9,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 
 const PORT = +(process.env.PORT || 8093);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -23,6 +24,7 @@ const TOKEN_TTL = 30 * 24 * 3600 * 1000;      // same lifetime as jc-round-api t
 const LINK_TTL = 14 * 24 * 3600 * 1000;       // supplier download link for large PDFs
 const ADMIN_ROLES = ['MAIN ADMIN', 'SCM Manager', 'WH ADMIN', 'PCM ADMIN'];
 
+const OTHER_KEY = 'other';
 const DEFAULT_ITEMS = [
   { key: 'fresh_milk', label: 'Fresh Milk', labelTh: 'นมสด', to: ['Chakrit.ji@jianchatea.com'], cc: [] },
   { key: 'yogurt', label: 'Yogurt', labelTh: 'โยเกิร์ต', to: ['Malichat.no@jianchatea.com'], cc: [] },
@@ -49,6 +51,8 @@ function loadDb() {
   db.accounts = db.accounts || [];
   db.drops = db.drops || [];
   db.items = db.items && db.items.length ? db.items : DEFAULT_ITEMS.map(i => ({ ...i }));
+  // catch-all for PO lines that match no item: recorded + emailed to this item's recipients (empty = shows in back office as "waiting for SCM")
+  if (!db.items.some(i => i.key === OTHER_KEY)) db.items.push({ key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', to: [], cc: [] });
   db.seq = db.seq || 0;
   return db;
 }
@@ -143,6 +147,51 @@ function canUseDrop(user) {
   return ADMIN_ROLES.includes(user.role) && p.orderDrop !== false;
 }
 
+/* ---------------- PO parsing (pdftotext) ---------------- */
+function pdfText(buf) {
+  return new Promise((resolve, reject) => {
+    const tmp = path.join(DATA_DIR, 'tmp-' + crypto.randomBytes(8).toString('hex') + '.pdf');
+    fs.writeFileSync(tmp, buf, { mode: 0o600 });
+    execFile('pdftotext', ['-layout', '-enc', 'UTF-8', tmp, '-'], { timeout: 20000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
+      fs.unlink(tmp, () => {});
+      if (err) return reject(Object.assign(new Error(err.code === 'ENOENT' ? 'pdftotext not installed' : 'cannot read PDF'), { code: err.code === 'ENOENT' ? 'NOTOOL' : 'BADPDF' }));
+      resolve(String(out));
+    });
+  });
+}
+const num = v => parseFloat(String(v).replace(/,/g, ''));
+function parsePo(text) {
+  const lines = text.split(/\r?\n/);
+  const col = (l, n) => (l || '').slice(0, n).split(/\s{3,}/)[0].trim();
+  const po = { number: (text.match(/\bPO\d{6,}\b/) || [])[0] || '', lines: [] };
+  const bi = lines.findIndex(l => /BUYER\s*\/\s*SHIP TO/i.test(l));
+  if (bi >= 0) { const l = lines.slice(bi + 1).find(x => x.trim()); po.buyer = l ? l.trim().split(/\s{3,}/)[0] : ''; }
+  po.buyer = po.buyer || '';
+  const grab = re => { const m = text.match(re); return m ? m[1].trim() : ''; };
+  po.issuedDate = grab(/Issued date\s*:\s*(\S+)/i); po.dueDate = grab(/Due date\s*:\s*(\S+)/i); po.creditTerms = grab(/Credit terms\s*:\s*(\S+)/i);
+  po.contact = grab(/Contact\s*:\s*(.+?)(?:\s{3,}|$)/im); po.tel = grab(/Tel\s*:\s*(.+?)(?:\s{3,}|$)/im);
+  po.issuedBy = grab(/Issued by\s*:\s*(.+?)\s*$/im);
+  const rowRe = /^\s*(\d{1,3})\s+(\d{4,}\s*-\s*.+?)\s{2,}([\d,]+(?:\.\d+)?)\s+(\S+)\s+([YN])\s+([\d,]+\.\d+)\s+([\d,]+\.\d+)\s*$/;
+  for (const l of lines) {
+    const m = l.match(rowRe);
+    if (m) po.lines.push({ no: +m[1], name: m[2].replace(/\s+/g, ' ').trim(), qty: num(m[3]), unit: m[4], vat: m[5], price: num(m[6]), total: num(m[7]) });
+  }
+  const t = text.match(/(?<!Grand )\bTotal\s+([\d,]+\.\d+)\s*$/m), v = text.match(/VAT\s*\((\d+(?:\.\d+)?)%\)\s+([\d,]+\.\d+)/i), g = text.match(/Grand Total\s+([\d,]+\.\d+)/i);
+  po.total = t ? num(t[1]) : null; po.vatRate = v ? v[1] : ''; po.vat = v ? num(v[2]) : null; po.grand = g ? num(g[1]) : null;
+  const ri = lines.findIndex(l => /Remarks\s*:/i.test(l));
+  if (ri >= 0) {
+    const end = lines.findIndex((l, i) => i > ri && /Authorized by|_{6,}/.test(l));
+    po.remarks = lines.slice(ri, end > ri ? end : ri + 6).map((l, i) => (i === 0 ? l.replace(/^.*?Remarks\s*:/i, '') : l).slice(0, 60).trim()).filter(Boolean).join(' ').replace(/^-$/, '');
+  } else po.remarks = '';
+  return po;
+}
+const normName = x => String(x || '').toLowerCase().replace(/[\s\-_.]+/g, '');
+function itemForLine(name) {
+  const n = normName(name);
+  const hit = DB.items.find(i => i.key !== OTHER_KEY && [i.label, i.labelTh].some(w => normName(w).length >= 2 && n.includes(normName(w))));
+  return hit ? hit.key : OTHER_KEY;
+}
+
 /* ---------------- mail (Microsoft Graph) ---------------- */
 let graphTok = { tok: null, exp: 0 };
 async function graphToken() {
@@ -162,17 +211,41 @@ function fileLink(drop) {
   const sig = crypto.createHmac('sha256', SECRET).update(drop.id + '.' + exp).digest('base64url');
   return `${PUBLIC_ORIGIN}/api/drop/f/${drop.id}?exp=${exp}&sig=${sig}`;
 }
+const money = n => n == null ? '' : Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function buildMail(drop, item) {
-  const subject = `[JIANCHA Order Drop] ${item.label} · ${drop.branchName} · ${drop.ref}`;
+  const po = drop.po;
+  const subject = `[JIANCHA Order Drop] ${item.label} · ${po ? (po.buyer || drop.branchName) + ' · ' + po.number : drop.branchName} · ${drop.ref}`;
   const big = drop.size > ATTACH_MAX;
   const when = new Date(drop.createdAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok' });
-  const row = (k, v) => `<tr><td style="padding:6px 14px 6px 0;color:#525252;font-size:12px;letter-spacing:.06em;text-transform:uppercase">${k}</td><td style="padding:6px 0;font-size:14px;color:#181818"><b>${v}</b></td></tr>`;
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+  const row = (k, v) => v ? `<tr><td style="padding:5px 14px 5px 0;color:#525252;font-size:12px;letter-spacing:.06em;text-transform:uppercase;vertical-align:top">${k}</td><td style="padding:5px 0;font-size:14px;color:#181818"><b>${v}</b></td></tr>` : '';
+  const td = (v, al) => `<td style="padding:6px 8px;border-bottom:1px solid #EBE9E6;font-size:13px;text-align:${al || 'left'}">${v}</td>`;
+  const th = (v, al) => `<th style="padding:6px 8px;background:#F3F1EB;font-size:11px;letter-spacing:.05em;text-transform:uppercase;text-align:${al || 'left'}">${v}</th>`;
+  let head, body = '';
+  if (po) {
+    head = row('Ref', escHtml(drop.ref)) + row('PO No.', escHtml(po.number)) + row('Item', escHtml(item.label) + (item.labelTh ? ' · ' + escHtml(item.labelTh) : ''))
+      + row('Buyer / Ship to', escHtml(po.buyer)) + row('Contact', escHtml(po.contact) + (po.tel && po.tel !== '-' && po.tel !== '--' ? ' · ' + escHtml(po.tel) : ''))
+      + row('Issued date', escHtml(po.issuedDate)) + row('Due date', po.dueDate && po.dueDate !== '-' ? escHtml(po.dueDate) : '') + row('Credit terms', po.creditTerms && po.creditTerms !== '-' ? escHtml(po.creditTerms) : '')
+      + row('Issued by', escHtml(po.issuedBy || drop.issuerName)) + row('Submitted', escHtml(when) + ' (BKK)');
+    body = `<table style="border-collapse:collapse;width:100%;margin-top:16px"><tr>${th('No.')}${th('Ingredient')}${th('Qty', 'right')}${th('Unit')}${th('VAT')}${th('Price', 'right')}${th('Total', 'right')}</tr>`
+      + po.lines.map((l, i) => `<tr>${td(i + 1)}${td(escHtml(l.name))}${td(escHtml(l.qty), 'right')}${td(escHtml(l.unit))}${td(escHtml(l.vat))}${td(money(l.price), 'right')}${td(money(l.total), 'right')}</tr>`).join('') + '</table>'
+      + `<table style="border-collapse:collapse;margin:10px 0 0 auto">${po.partial
+        ? `<tr><td style="padding:3px 14px;font-size:13px;color:#525252">Total (this item)</td><td style="padding:3px 0;font-size:14px;text-align:right"><b>${money(po.total)}</b></td></tr>`
+        : `<tr><td style="padding:3px 14px;font-size:13px;color:#525252">Total</td><td style="text-align:right;font-size:13px">${money(po.total)}</td></tr>`
+          + `<tr><td style="padding:3px 14px;font-size:13px;color:#525252">VAT${po.vatRate ? ' (' + escHtml(po.vatRate) + '%)' : ''}</td><td style="text-align:right;font-size:13px">${money(po.vat)}</td></tr>`
+          + `<tr><td style="padding:3px 14px;font-size:14px"><b>Grand Total</b></td><td style="text-align:right;font-size:15px"><b>${money(po.grand)}</b></td></tr>`}</table>`
+      + (po.partial ? `<p style="font-size:11px;color:#8a6d00;margin:8px 0 0">ใบ PO นี้มีหลายประเภทสินค้า — เมลนี้แสดงเฉพาะรายการของ ${escHtml(item.label)} / This PO has several item types; only this item's lines are shown.</p>` : '')
+      + (po.remarks ? `<p style="font-size:13px;margin:12px 0 0"><span style="color:#525252">Remarks:</span> ${escHtml(po.remarks)}</p>` : '');
+  } else {
+    head = row('Ref', escHtml(drop.ref)) + row('Item', escHtml(item.label) + (item.labelTh ? ' · ' + escHtml(item.labelTh) : ''))
+      + row('Branch', escHtml(drop.branchName) + (drop.branchCode ? ' (' + escHtml(drop.branchCode) + ')' : '')) + row('Issued by', escHtml(drop.issuerName))
+      + row('Submitted', escHtml(when) + ' (BKK)') + row('File', escHtml(drop.fileName));
+  }
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px">
   <div style="background:#181818;color:#fff;padding:16px 20px;letter-spacing:.2em;font-weight:700">JIAN CHA <span style="color:#AD9C82;font-size:11px;letter-spacing:.25em;font-weight:400">· ORDER DROP</span></div>
   <div style="border:1px solid #EBE9E6;border-top:3px solid #AD9C82;padding:18px 20px">
    <p style="margin:0 0 12px;font-size:14px">มีใบสั่งซื้อใหม่จากสาขาแฟรนไชส์ / New franchise order received.</p>
-   <table style="border-collapse:collapse">${row('Ref', escHtml(drop.ref))}${row('Item', escHtml(item.label) + (item.labelTh ? ' · ' + escHtml(item.labelTh) : ''))}${row('Branch', escHtml(drop.branchName) + ' (' + escHtml(drop.branchCode) + ')')}${row('Issued by', escHtml(drop.issuerName))}${row('Submitted', escHtml(when) + ' (BKK)')}${row('File', escHtml(drop.fileName))}</table>
-   ${big ? `<p style="margin:16px 0 0"><a href="${fileLink(drop)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ลิงก์ใช้ได้ 14 วัน / Link valid 14 days</span></p>` : `<p style="margin:16px 0 0;font-size:12px;color:#525252">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}
+   <table style="border-collapse:collapse">${head}</table>${body}
+   ${big ? `<p style="margin:16px 0 0"><a href="${fileLink(drop)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ไฟล์ใหญ่เกินแนบอีเมล — ลิงก์ใช้ได้ 14 วัน / File too large to attach — link valid 14 days.</span></p>` : `<p style="font-size:12px;color:#525252;margin:14px 0 0">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}
   </div>
   <p style="font-size:11px;color:#525252;margin:10px 2px">อีเมลอัตโนมัติจากระบบ JC-ROUND — กรุณาอย่าตอบกลับ / Automated message, please do not reply.</p></div>`;
   return { subject, html, big };
@@ -237,7 +310,7 @@ const clientIp = req => String(req.headers['x-forwarded-for'] || req.socket.remo
 const cleanStr = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const emailOk = e => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e);
 function pubAccount(a) { return { id: a.id, username: a.username, name: a.name, branches: a.branches || [], active: a.active !== false, createdAt: a.createdAt, createdBy: a.createdBy, lastLoginAt: a.lastLoginAt || null }; }
-function pubDrop(d) { return { id: d.id, ref: d.ref, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, item: d.item, itemLabel: (DB.items.find(i => i.key === d.item) || {}).label || d.item, fileName: d.fileName, size: d.size, createdAt: d.createdAt, username: d.username, accountName: d.accountName, email: d.email || {} }; }
+function pubDrop(d) { return { id: d.id, ref: d.ref, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, poNumber: d.po ? d.po.number : '', item: d.item, itemLabel: (DB.items.find(i => i.key === d.item) || {}).label || d.item, fileName: d.fileName, size: d.size, createdAt: d.createdAt, username: d.username, accountName: d.accountName, email: d.email || {} }; }
 const pubItems = () => DB.items.map(i => ({ key: i.key, label: i.label, labelTh: i.labelTh }));
 function streamPdf(res, drop, inline) {
   const f = path.join(FILES_DIR, drop.id + '.pdf');
@@ -293,31 +366,36 @@ async function handle(req, res) {
       return send(res, 200, { drops: DB.drops.filter(d => d.accountId === a.id).slice(-200).reverse().map(pubDrop) });
     }
     if (M === 'POST' && seg[1] === 'drops') {
-      const q = u.searchParams;
-      const branchCode = cleanStr(q.get('branch'), 32), issuerName = cleanStr(q.get('issuer'), 120), itemKey = cleanStr(q.get('item'), 40);
-      let fileName = cleanStr(q.get('filename'), 150).replace(/[\\/:*?"<>|]/g, '_') || 'order.pdf';
+      let fileName = cleanStr(u.searchParams.get('filename'), 150).replace(/[\\/:*?"<>|]/g, '_') || 'order.pdf';
       if (!/\.pdf$/i.test(fileName)) fileName += '.pdf';
-      if (!issuerName) return send(res, 400, { error: 'name of order issuer is required' });
-      const item = DB.items.find(i => i.key === itemKey);
-      if (!item) return send(res, 400, { error: 'unknown item' });
-      const branches = await branchList();
-      const br = branches.find(b => b.code === branchCode);
-      if (!br || ((a.branches || []).length && !a.branches.includes(branchCode))) return send(res, 400, { error: 'branch not allowed' });
       let buf;
       try { buf = await readBody(req, MAX_PDF); } catch (e) { return send(res, e.code === 413 ? 413 : 400, { error: e.code === 413 ? 'file too large' : 'upload failed' }); }
       if (buf.length < 8 || buf.subarray(0, 5).toString('latin1') !== '%PDF-') return send(res, 400, { error: 'file must be a PDF' });
-      DB.seq++;
+      let po;
+      try { po = parsePo(await pdfText(buf)); }
+      catch (e) { return send(res, e.code === 'NOTOOL' ? 503 : 422, { error: e.code === 'NOTOOL' ? 'ระบบอ่าน PDF ยังไม่พร้อม แจ้งทีม SCM' : 'อ่านไฟล์ PDF ไม่ได้' }); }
+      if (!po.number || !po.lines.length) return send(res, 422, { error: 'ไม่พบข้อมูล PO ในไฟล์นี้ — ต้องเป็นใบ PO (PURCHASE ORDER) จากระบบ PO เท่านั้น' });
+      const groups = new Map();
+      for (const l of po.lines) { const k = itemForLine(l.name); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(l); }
       const now = new Date();
       const ymd = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).replace(/-/g, '');
-      const drop = {
-        id: id('d'), ref: `OD-${ymd}-${String(DB.seq).padStart(4, '0')}`, accountId: a.id, username: a.username, accountName: a.name,
-        branchCode: br.code, branchName: br.name, issuerName, item: item.key, fileName, size: buf.length,
-        sha256: crypto.createHash('sha256').update(buf).digest('hex'), createdAt: now.toISOString(), email: { status: 'queued', attempts: 0 },
-      };
-      fs.writeFileSync(path.join(FILES_DIR, drop.id + '.pdf'), buf, { mode: 0o600 });
-      DB.drops.push(drop); saveDb();
-      deliver(drop); // async — portal gets the ref immediately
-      return send(res, 201, { drop: pubDrop(drop) });
+      const sha = crypto.createHash('sha256').update(buf).digest('hex');
+      const out = [];
+      for (const [key, lines] of groups) {
+        DB.seq++;
+        const partial = groups.size > 1;
+        const gpo = { ...po, lines, partial, ...(partial ? { total: Math.round(lines.reduce((x, l) => x + l.total, 0) * 100) / 100 } : {}) };
+        const drop = {
+          id: id('d'), ref: `OD-${ymd}-${String(DB.seq).padStart(4, '0')}`, accountId: a.id, username: a.username, accountName: a.name,
+          branchCode: '', branchName: po.buyer || '-', issuerName: po.issuedBy || a.name, item: key, fileName, size: buf.length,
+          sha256: sha, createdAt: now.toISOString(), email: { status: 'queued', attempts: 0 }, po: gpo,
+        };
+        fs.writeFileSync(path.join(FILES_DIR, drop.id + '.pdf'), buf, { mode: 0o600 });
+        DB.drops.push(drop); out.push(drop);
+      }
+      saveDb();
+      out.forEach(deliver); // async — portal gets the refs immediately
+      return send(res, 201, { drop: pubDrop(out[0]), drops: out.map(pubDrop) });
     }
     return send(res, 404, { error: 'not found' });
   }
