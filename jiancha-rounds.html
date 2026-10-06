@@ -129,6 +129,7 @@ th{font-family:var(--jc-font-head);font-size:.68rem;letter-spacing:.05em;text-tr
 .credbox span{color:var(--jc-gold);font-family:var(--jc-font-head);font-size:.66rem;letter-spacing:.12em;display:inline-block;width:6.5rem}
 .estat{display:inline-block;font-size:.68rem;padding:.2em .55em;border-radius:2px;white-space:nowrap}
 .estat.sent{background:var(--okbg);color:var(--ok)} .estat.failed{background:var(--badbg);color:var(--bad)} .estat.wait{background:var(--warnbg);color:#9a7b12}
+.grid2>*{min-width:0} #fI{width:100%;max-width:100%;text-overflow:ellipsis}
 .dropzone{border:2px dashed var(--jc-border);border-radius:4px;padding:1.4rem 1rem;text-align:center;cursor:pointer;background:#faf9f6;transition:.12s}
 .dropzone.over,.dropzone:hover{border-color:var(--jc-gold);background:#fff}
 .dropzone.has{border-style:solid;border-color:var(--jc-gold);background:#fff}
@@ -1467,7 +1468,7 @@ function drawDropList(tab,u){
   const rows=d.drops.filter(x=>(!V.item||x.item===V.item)&&(!q||[x.ref,x.branchName,x.branchCode,x.issuerName,x.accountName,x.fileName].join(' ').toLowerCase().includes(q)));
   tab.innerHTML=`<div class="row" style="margin-bottom:.7rem">
       <div class="field" style="flex:1;min-width:200px;margin:0"><input id="dq" placeholder="ค้นหา ref / สาขา / ผู้สั่ง…" value="${esc(V.q)}"></div>
-      <div class="field" style="margin:0"><select id="di"><option value="">ทุกรายการ</option>${d.items.map(i=>`<option value="${i.key}" ${V.item===i.key?'selected':''}>${esc(i.label)}</option>`).join('')}</select></div></div>
+      <div class="field" style="margin:0"><select id="di"><option value="">ทุกรายการ</option>${d.items.map(i=>`<option value="${i.key}" ${V.item===i.key?'selected':''}>${esc(i.name)}</option>`).join('')}</select></div></div>
     <div class="card" style="padding:0"><div class="tblwrap"><table>
       <thead><tr><th>วันที่</th><th>Ref</th><th>สาขา</th><th>รายการ</th><th>ผู้สั่ง</th><th>ไฟล์</th><th>อีเมล</th><th></th></tr></thead>
       <tbody>${rows.length?rows.map(x=>`<tr>
@@ -1550,8 +1551,8 @@ function credModal(acc,pw,title){
 function drawRouting(tab,u){
   const d=DROP_VIEW.data;
   tab.innerHTML=`<div class="card" style="padding:0"><div class="tblwrap"><table>
-    <thead><tr><th>รายการ (Item)</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th></tr></thead>
-    <tbody>${d.items.map(i=>`<tr><td><b>${esc(i.label)}</b><div class="small muted th">${esc(i.labelTh||'')}</div></td>
+    <thead><tr><th>รายการ (Item) · ซัพพลายเออร์</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th></tr></thead>
+    <tbody>${d.items.map(i=>`<tr><td><b>${esc(i.label)}</b><div class="small muted th">${esc(i.supplier?i.supplier.name+' · '+i.supplier.code:'')}</div></td>
       <td class="field" style="margin:0"><input data-to="${i.key}" value="${esc((i.to||[]).join(', '))}" style="width:100%"></td>
       <td class="field" style="margin:0"><input data-cc="${i.key}" value="${esc((i.cc||[]).join(', '))}" placeholder="ไม่บังคับ" style="width:100%"></td></tr>`).join('')}</tbody></table></div></div>
     <div class="row" style="justify-content:space-between;margin-top:.7rem"><div class="small muted th">คั่นหลายอีเมลด้วยเครื่องหมายจุลภาค ( , ) · มีผลกับใบสั่งใหม่ทันที</div><button class="btn gold" id="r_save">บันทึกผู้รับอีเมล</button></div>`;
@@ -1603,7 +1604,7 @@ function drawPortal(){
     <form class="card" id="pForm">
       <div class="grid2">
         <div class="field"><label>สาขา (Branch) *</label><select id="fB" required>${me.branches.length===1?'':'<option value="">— เลือกสาขา —</option>'}${me.branches.map(b=>`<option value="${esc(b.code)}">${esc(b.name)}</option>`).join('')}</select></div>
-        <div class="field"><label>รายการ (Item) *</label><select id="fI" required><option value="">— เลือกรายการ —</option>${me.items.map(i=>`<option value="${esc(i.key)}">${esc(i.label)}${i.labelTh?' · '+esc(i.labelTh):''}</option>`).join('')}</select></div>
+        <div class="field"><label>รายการ (Item) *</label><select id="fI" required><option value="">— เลือกรายการ —</option>${me.items.map(i=>`<option value="${esc(i.key)}">${esc(i.label)}</option>`).join('')}</select><div id="fIhint" class="small muted" style="margin-top:.3rem"></div></div>
       </div>
       <div class="field"><label>ชื่อผู้ออกใบสั่ง (Name of Order Issuer) *</label><input id="fN" maxlength="120" required placeholder="ชื่อ-นามสกุล"></div>
       <div class="field"><label>ไฟล์ใบสั่ง (PDF) *</label>
@@ -1624,6 +1625,7 @@ function drawPortal(){
     if(file.size>me.maxBytes){$('#fMsg').textContent='ไฟล์ใหญ่เกิน '+fmtSize(me.maxBytes);return}
     P.file=file;$('#fMsg').textContent='';z.classList.add('has');$('#fZt').innerHTML=`📄 <b>${esc(file.name)}</b> <span class="muted small">${fmtSize(file.size)}</span><div class="small muted">คลิกเพื่อเปลี่ยนไฟล์</div>`;
   };
+  $('#fI').onchange=e=>{const it=me.items.find(i=>i.key===e.target.value);$('#fIhint').textContent=it&&it.label.includes(' / ')?it.label.split(' / ').join(' · '):''};
   z.onclick=()=>f.click(); f.onchange=()=>setFile(f.files[0]);
   z.ondragover=e=>{e.preventDefault();z.classList.add('over')}; z.ondragleave=()=>z.classList.remove('over');
   z.ondrop=e=>{e.preventDefault();z.classList.remove('over');setFile(e.dataTransfer.files[0])};

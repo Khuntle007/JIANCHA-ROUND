@@ -23,12 +23,31 @@ const TOKEN_TTL = 30 * 24 * 3600 * 1000;      // same lifetime as jc-round-api t
 const LINK_TTL = 14 * 24 * 3600 * 1000;       // supplier download link for large PDFs
 const ADMIN_ROLES = ['MAIN ADMIN', 'SCM Manager', 'WH ADMIN', 'PCM ADMIN'];
 
-const DEFAULT_ITEMS = [
-  { key: 'fresh_milk', label: 'Fresh Milk', labelTh: 'นมสด', to: ['Chakrit.ji@jianchatea.com'], cc: [] },
-  { key: 'yogurt', label: 'Yogurt', labelTh: 'โยเกิร์ต', to: ['Malichat.no@jianchatea.com'], cc: [] },
-  { key: 'cream_cheese', label: 'Creamcheese', labelTh: 'ครีมชีส', to: ['Malichat.no@jianchatea.com'], cc: [] },
-  { key: 'whipping_cream', label: 'Whipping cream', labelTh: 'วิปปิ้งครีม', to: ['Chakrit.ji@jianchatea.com'], cc: [] },
-];
+// Order items = one dropdown entry per supplier company (company + codes are internal only — never shown on
+// the portal). The catalog is defined here; only the email recipients (to/cc) per group live in db.json.
+const CATALOG = [
+  { key: 'sp004', name: 'Yogurt', supplier: { code: 'SP004', name: 'บริษัท ดัชมิลล์ จำกัด' },
+    ingredients: [{ code: '030019', name: 'Yogurt (2 Kg)' }] },
+  { key: 'sp036', name: 'Creamcheese / Whipping cream', supplier: { code: 'SP036', name: 'บริษัท โกลเบิล พรีเมี่ยม ไวน์ จำกัด' },
+    ingredients: [{ code: '030013', name: 'Creamcheese (1 Kg)' }, { code: '030014', name: 'Whipping cream (1 Ltr.)' }] },
+  { key: 'sp162', name: 'Fresh milk', supplier: { code: 'SP162', name: 'บริษัท มาลี เอ็นเตอร์ไพรส์ จำกัด' },
+    ingredients: [{ code: '030024', name: 'Fresh milk (2 Ltr.)' }] },
+  { key: 'sp011', name: 'Ice hot creamer', supplier: { code: 'SP011', name: 'บริษัท ริช โปรดักส์ แมนูแฟคเจอริ่ง (ประเทศไทย) จำกัด' },
+    ingredients: [{ code: '030012', name: 'Ice hot creamer (1 Ltr.)' }] },
+  { key: 'sp163', name: 'Fruits', supplier: { code: 'SP163', name: 'บริษัท ทรีดี ฟู้ด แอนด์ ดริงค์ จำกัด' },
+    ingredients: [
+      { code: '010001', name: 'Lemon' }, { code: '010006', name: 'Mango' }, { code: '010010', name: 'Navel Orange' },
+      { code: '010011', name: 'Pineapple' }, { code: '010012', name: 'Red Seedless Grapes' }, { code: '010016', name: 'Taro' },
+      { code: '010039', name: 'Pomegranate' }, { code: '010044', name: 'Pink Guava' }, { code: '010045', name: 'Green Mango' },
+      { code: '010003', name: 'Fuji Apple' }, { code: '010002', name: 'Watermelon' },
+    ] },
+].map(c => ({ ...c, label: c.ingredients.map(i => i.name).join(' / ') }));
+// first-time recipients for a group that has none yet (admin changes them in the Email routing tab)
+const DEFAULT_TO = { sp004: ['Malichat.no@jianchatea.com'], sp036: ['Malichat.no@jianchatea.com'], sp162: ['Chakrit.ji@jianchatea.com'] };
+const FALLBACK_TO = ['Chakrit.ji@jianchatea.com'];
+// pre-grouping item keys (2026-10-06 v1) → supplier group
+const LEGACY_ITEM = { fresh_milk: 'sp162', yogurt: 'sp004', cream_cheese: 'sp036', whipping_cream: 'sp036' };
+
 
 /* ---------------- storage ---------------- */
 const FILES_DIR = path.join(DATA_DIR, 'files');
@@ -48,7 +67,16 @@ function loadDb() {
   try { db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch (_) {}
   db.accounts = db.accounts || [];
   db.drops = db.drops || [];
-  db.items = db.items && db.items.length ? db.items : DEFAULT_ITEMS.map(i => ({ ...i }));
+  const old = db.items || [];
+  const uniq = arr => arr.filter((e, i) => arr.findIndex(x => x.toLowerCase() === e.toLowerCase()) === i);
+  db.items = CATALOG.map(c => {
+    const same = old.find(o => o.key === c.key);
+    const legacy = old.filter(o => LEGACY_ITEM[o.key] === c.key);
+    const to = same ? same.to : uniq(legacy.flatMap(o => o.to || []));
+    const cc = same ? same.cc : uniq(legacy.flatMap(o => o.cc || []));
+    return { ...c, to: to && to.length ? to : (DEFAULT_TO[c.key] || FALLBACK_TO).slice(), cc: cc || [] };
+  });
+  db.drops.forEach(d => { if (LEGACY_ITEM[d.item]) { d.itemLegacy = d.item; d.item = LEGACY_ITEM[d.item]; } });
   db.seq = db.seq || 0;
   return db;
 }
@@ -163,7 +191,7 @@ function fileLink(drop) {
   return `${PUBLIC_ORIGIN}/api/drop/f/${drop.id}?exp=${exp}&sig=${sig}`;
 }
 function buildMail(drop, item) {
-  const subject = `[JIANCHA Order Drop] ${item.label} · ${drop.branchName} · ${drop.ref}`;
+  const subject = `[JIANCHA Order Drop] ${item.name} · ${drop.branchName} · ${drop.ref}`;
   const big = drop.size > ATTACH_MAX;
   const when = new Date(drop.createdAt).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok' });
   const row = (k, v) => `<tr><td style="padding:6px 14px 6px 0;color:#525252;font-size:12px;letter-spacing:.06em;text-transform:uppercase">${k}</td><td style="padding:6px 0;font-size:14px;color:#181818"><b>${v}</b></td></tr>`;
@@ -171,7 +199,7 @@ function buildMail(drop, item) {
   <div style="background:#181818;color:#fff;padding:16px 20px;letter-spacing:.2em;font-weight:700">JIAN CHA <span style="color:#AD9C82;font-size:11px;letter-spacing:.25em;font-weight:400">· ORDER DROP</span></div>
   <div style="border:1px solid #EBE9E6;border-top:3px solid #AD9C82;padding:18px 20px">
    <p style="margin:0 0 12px;font-size:14px">มีใบสั่งซื้อใหม่จากสาขาแฟรนไชส์ / New franchise order received.</p>
-   <table style="border-collapse:collapse">${row('Ref', escHtml(drop.ref))}${row('Item', escHtml(item.label) + (item.labelTh ? ' · ' + escHtml(item.labelTh) : ''))}${row('Branch', escHtml(drop.branchName) + ' (' + escHtml(drop.branchCode) + ')')}${row('Issued by', escHtml(drop.issuerName))}${row('Submitted', escHtml(when) + ' (BKK)')}${row('File', escHtml(drop.fileName))}</table>
+   <table style="border-collapse:collapse">${row('Ref', escHtml(drop.ref))}${row('Item', escHtml(item.label))}${row('Branch', escHtml(drop.branchName) + ' (' + escHtml(drop.branchCode) + ')')}${row('Issued by', escHtml(drop.issuerName))}${row('Submitted', escHtml(when) + ' (BKK)')}${row('File', escHtml(drop.fileName))}</table>
    ${big ? `<p style="margin:16px 0 0"><a href="${fileLink(drop)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ลิงก์ใช้ได้ 14 วัน / Link valid 14 days</span></p>` : `<p style="margin:16px 0 0;font-size:12px;color:#525252">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}
   </div>
   <p style="font-size:11px;color:#525252;margin:10px 2px">อีเมลอัตโนมัติจากระบบ JC-ROUND — กรุณาอย่าตอบกลับ / Automated message, please do not reply.</p></div>`;
@@ -237,8 +265,8 @@ const clientIp = req => String(req.headers['x-forwarded-for'] || req.socket.remo
 const cleanStr = (s, n) => String(s == null ? '' : s).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const emailOk = e => /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e);
 function pubAccount(a) { return { id: a.id, username: a.username, name: a.name, branches: a.branches || [], active: a.active !== false, createdAt: a.createdAt, createdBy: a.createdBy, lastLoginAt: a.lastLoginAt || null }; }
-function pubDrop(d) { return { id: d.id, ref: d.ref, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, item: d.item, itemLabel: (DB.items.find(i => i.key === d.item) || {}).label || d.item, fileName: d.fileName, size: d.size, createdAt: d.createdAt, username: d.username, accountName: d.accountName, email: d.email || {} }; }
-const pubItems = () => DB.items.map(i => ({ key: i.key, label: i.label, labelTh: i.labelTh }));
+function pubDrop(d) { return { id: d.id, ref: d.ref, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, item: d.item, itemLabel: (DB.items.find(i => i.key === d.item) || {}).name || d.item, fileName: d.fileName, size: d.size, createdAt: d.createdAt, username: d.username, accountName: d.accountName, email: d.email || {} }; }
+const pubItems = () => DB.items.map(i => ({ key: i.key, label: i.label, name: i.name })); // portal: no supplier / codes
 function streamPdf(res, drop, inline) {
   const f = path.join(FILES_DIR, drop.id + '.pdf');
   if (!fs.existsSync(f)) return send(res, 404, { error: 'file missing' });
