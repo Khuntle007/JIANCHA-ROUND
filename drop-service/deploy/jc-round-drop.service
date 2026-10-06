@@ -1,0 +1,19 @@
+[Unit]
+Description=JC-ROUND External Order Drop service
+After=network.target jc-round-api.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/jc-round-drop
+EnvironmentFile=/opt/jc-round-drop/.env
+ExecStart=/usr/bin/env node /opt/jc-round-drop/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/jc-round-drop/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

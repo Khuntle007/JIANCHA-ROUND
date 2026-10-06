@@ -6,3 +6,7 @@ Desktop.ini
 .DS_Store
 # deploy helper — contains production server IP + root user, must not reach the public repo
 deploy-prod.sh
+
+# local dev harness data
+dev/.data/
+drop-service/data/
