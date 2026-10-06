@@ -479,6 +479,17 @@ async function handle(req, res) {
     if (M === 'POST' && seg[1] === 'items') {
       const b = await readJson(req);
       if (!Array.isArray(b.items)) return send(res, 400, { error: 'items required' });
+      if (b.add) { // new item type: PO lines whose name contains its label (EN or TH) are routed to it
+        const label = cleanStr(b.add.label, 60), labelTh = cleanStr(b.add.labelTh, 60);
+        const to = (b.add.to || []).map(e => cleanStr(e, 120)).filter(Boolean), cc = (b.add.cc || []).map(e => cleanStr(e, 120)).filter(Boolean);
+        if (!label) return send(res, 400, { error: 'item name required' });
+        const bad = [...to, ...cc].find(e => !emailOk(e));
+        if (bad) return send(res, 400, { error: 'invalid email: ' + bad });
+        if (!to.length) return send(res, 400, { error: 'at least one recipient' });
+        const key = normName(label).replace(/[^a-z0-9ก-๙]/g, '').slice(0, 30) || id('i');
+        if (DB.items.some(i => i.key === key || normName(i.label) === normName(label))) return send(res, 400, { error: 'item already exists' });
+        DB.items.splice(DB.items.findIndex(i => i.key === OTHER_KEY), 0, { key, label, labelTh, to, cc }); saveDb();
+      }
       const out = [];
       for (const it of b.items) {
         const cur = DB.items.find(i => i.key === it.key);
@@ -486,7 +497,7 @@ async function handle(req, res) {
         const to = (it.to || []).map(e => cleanStr(e, 120)).filter(Boolean), cc = (it.cc || []).map(e => cleanStr(e, 120)).filter(Boolean);
         const bad = [...to, ...cc].find(e => !emailOk(e));
         if (bad) return send(res, 400, { error: 'invalid email: ' + bad });
-        if (!to.length) return send(res, 400, { error: cur.label + ': at least one recipient' });
+        if (!to.length && cur.key !== OTHER_KEY) return send(res, 400, { error: cur.label + ': at least one recipient' });
         out.push({ ...cur, to, cc });
       }
       DB.items = DB.items.map(i => out.find(o => o.key === i.key) || i); saveDb();
