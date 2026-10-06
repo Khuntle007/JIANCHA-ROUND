@@ -1558,6 +1558,19 @@ function drawRouting(tab,u){
       <td class="field" style="margin:0"><input data-cc="${i.key}" value="${esc((i.cc||[]).join(', '))}" placeholder="ไม่บังคับ" style="width:100%"></td></tr>`).join('')}</tbody></table></div></div>
     <div class="row" style="justify-content:space-between;margin-top:.7rem"><div class="small muted th">คั่นหลายอีเมลด้วยเครื่องหมายจุลภาค ( , ) · มีผลกับใบสั่งใหม่ทันที</div><button class="btn gold" id="r_save">บันทึกผู้รับอีเมล</button></div>`;
   const split=v=>v.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+  tab.insertAdjacentHTML('beforeend',`<div class="card" style="margin-top:1rem"><div class="kicker" style="margin-bottom:.5rem">เพิ่มประเภทสินค้าใหม่</div>
+    <div class="small muted th" style="margin-bottom:.6rem">ระบบจับคู่จากชื่อสินค้าใน PO ถ้าชื่อมีคำนี้อยู่ (เช่น "ice hot" หรือ "ครีมเทียม") จะส่งเมลถึงผู้รับด้านล่าง</div>
+    <div class="grid2"><div class="field"><label>ชื่ออังกฤษ (ใช้จับคู่) *</label><input id="n_label" maxlength="60" placeholder="เช่น Ice Hot"></div>
+    <div class="field"><label>ชื่อไทย (ไม่บังคับ ใช้จับคู่ด้วย)</label><input id="n_th" maxlength="60" placeholder="เช่น ไอซ์ฮอต"></div></div>
+    <div class="grid2"><div class="field"><label>ส่งถึง (To) *</label><input id="n_to" placeholder="a@jianchatea.com, b@jianchatea.com"></div>
+    <div class="field"><label>สำเนา (CC)</label><input id="n_cc" placeholder="ไม่บังคับ"></div></div>
+    <button class="btn gold" id="n_add">+ เพิ่มประเภท</button></div>`);
+  $('#n_add').onclick=()=>{
+    const add={label:$('#n_label').value.trim(),labelTh:$('#n_th').value.trim(),to:split($('#n_to').value),cc:split($('#n_cc').value)};
+    if(!add.label||!add.to.length){toast('กรอกชื่อและอีเมลผู้รับ');return}
+    dropFetch('/admin/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:[],add})},S.dropToken)
+      .then(j=>{d.items=j.items;toast('เพิ่มประเภทสินค้าแล้ว');drawRouting(tab,u)}).catch(e=>toast(e.message));
+  };
   $('#r_save').onclick=()=>{
     const items=d.items.map(i=>({key:i.key,to:split($(`[data-to="${i.key}"]`).value),cc:split($(`[data-cc="${i.key}"]`).value)}));
     dropFetch('/admin/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})},S.dropToken)
