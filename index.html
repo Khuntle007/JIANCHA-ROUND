@@ -79,6 +79,18 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .pside a.on{border-left-color:var(--jc-gold);background:#fff;color:var(--jc-ink);font-weight:700}
 .pmain{flex:1;min-width:0}
 @media(max-width:720px){.pside-layout{flex-direction:column;gap:.6rem}.pside{width:100%;position:static;flex-direction:row;overflow:auto}.pside a{border-left:0;border-bottom:3px solid transparent;white-space:nowrap}.pside a.on{border-bottom-color:var(--jc-gold)}}
+.msel{position:relative;min-width:190px}
+.msel-btn{width:100%;text-align:left;padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff;cursor:pointer;display:flex;justify-content:space-between;gap:.5rem;font:inherit;color:var(--jc-ink)}
+.msel-btn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msel-btn .ph{color:#777}
+.msel-panel{position:absolute;z-index:40;left:0;min-width:100%;width:max-content;max-width:340px;top:100%;margin-top:2px;background:#fff;border:1px solid var(--jc-border);box-shadow:0 6px 18px rgba(0,0,0,.14);display:none}
+.msel.open .msel-panel{display:block}
+.msel-panel input[type=search]{width:calc(100% - 1rem);margin:.5rem;padding:.45em .6em;border:1px solid var(--jc-border);border-radius:var(--radius)}
+.msel-list{max-height:260px;overflow:auto}
+.msel-list label{display:flex;gap:.5rem;align-items:center;padding:.4rem .7rem;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.9rem;color:var(--jc-ink);font-family:inherit}
+.msel-list label:hover{background:#faf9f6}
+.msel-tools{display:flex;justify-content:space-between;gap:1rem;padding:.1rem .7rem .4rem;font-size:.78rem}
+.msel-tools a{color:var(--jc-stone);cursor:pointer;text-decoration:underline}
 .rptbar{display:flex;flex-wrap:wrap;gap:.6rem .8rem;align-items:flex-end;margin-bottom:.9rem}
 .rptbar .field{margin:0}
 .rptsum{display:flex;gap:1.6rem;flex-wrap:wrap;margin-bottom:.8rem}
@@ -1674,7 +1686,26 @@ function drawPortal(){
 
 
 /* ---------- PO report (shared by franchise portal + back office) ---------- */
-let RPT={f:{from:'',to:'',branch:'',item:'',q:'',account:''},data:null,busy:false};
+const RPT_EMPTY=()=>({from:'',to:'',branch:[],item:[],q:'',account:[]});
+let RPT={f:RPT_EMPTY(),data:null,busy:false};
+const rptQs=f=>{const u=new URLSearchParams();Object.entries(f).forEach(([k,v])=>{(Array.isArray(v)?v:[v]).forEach(x=>{if(x)u.append(k,x)})});return u.toString()};
+document.addEventListener('click',e=>{document.querySelectorAll('.msel.open').forEach(m=>{if(!m.contains(e.target))m.classList.remove('open')})});
+/* searchable multi-select dropdown: opts=[[value,label]], sel=array (mutated in place) */
+function mountMsel(el,opts,sel,ph){
+  el.innerHTML=`<button type="button" class="msel-btn"><span class="lbl"></span><span>▾</span></button>
+    <div class="msel-panel"><input type="search" placeholder="ค้นหา…" autocomplete="off"><div class="msel-tools"><a data-all>เลือกทั้งหมด</a><a data-none>ล้างที่เลือก</a></div><div class="msel-list"></div></div>`;
+  const q=el.querySelector('input'),list=el.querySelector('.msel-list'),lbl=el.querySelector('.lbl');
+  const nm=t=>String(t).toLowerCase();
+  const shown=()=>opts.filter(o=>nm(o[1]).includes(nm(q.value.trim())));
+  const label=()=>{const n=sel.length;lbl.innerHTML=n?(n<=2?esc(sel.map(v=>(opts.find(o=>o[0]===v)||[v,v])[1]).join(', ')):`เลือกแล้ว ${n} รายการ`):`<span class="ph">${ph}</span>`};
+  const draw=()=>{const r=shown();list.innerHTML=r.length?r.map(o=>`<label><input type="checkbox" value="${esc(o[0])}" ${sel.includes(o[0])?'checked':''}> <span class="th">${esc(o[1])}</span></label>`).join(''):'<div class="empty th small" style="padding:.8rem">ไม่พบรายการ</div>';label()};
+  el.querySelector('.msel-btn').onclick=()=>{el.classList.toggle('open');if(el.classList.contains('open'))q.focus()};
+  q.oninput=draw;
+  list.onchange=e=>{const v=e.target.value,i=sel.indexOf(v);if(e.target.checked){if(i<0)sel.push(v)}else if(i>=0)sel.splice(i,1);label()};
+  el.querySelector('[data-all]').onclick=()=>{shown().forEach(o=>{if(!sel.includes(o[0]))sel.push(o[0])});draw()};
+  el.querySelector('[data-none]').onclick=()=>{sel.length=0;draw()};
+  draw();
+}
 const fmtMoney=n=>n==null||n===''?'':Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 function rptDay(iso){return new Date(iso).toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit',timeZone:'Asia/Bangkok'})}
 function renderReport(el,opt){
@@ -1682,14 +1713,14 @@ function renderReport(el,opt){
   const rows=d?d.rows:[];
   const pos=new Set(rows.filter(r=>r.poNumber).map(r=>r.poNumber)).size;
   const sum=rows.reduce((x,r)=>x+(+r.total||0),0);
-  const sel=(id,label,val,opts)=>`<div class="field"><label>${label}</label><select id="${id}"><option value="">ทั้งหมด</option>${opts.map(o=>`<option value="${esc(o[0])}" ${val===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>`;
+  const ms=(k,label)=>`<div class="field"><label>${label}</label><div class="msel" data-ms="${k}"></div></div>`;
   el.innerHTML=`
     <div class="card" style="margin-bottom:1rem"><div class="rptbar">
       <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rf_from" value="${esc(f.from)}"></div>
       <div class="field"><label>ถึงวันที่</label><input type="date" id="rf_to" value="${esc(f.to)}"></div>
-      ${sel('rf_branch','สาขา (จาก PO)',f.branch,(d?d.branches:[]).map(b=>[b,b]))}
-      ${sel('rf_item','ประเภทสินค้า',f.item,(d?d.items:[]).map(i=>[i.key,i.label]))}
-      ${opt.admin?sel('rf_account','บัญชีแฟรนไชส์',f.account,(d&&d.accounts||[]).map(a=>[a.id,a.name+' ('+a.username+')'])):''}
+      ${ms('branch','สาขา (จาก PO)')}
+      ${ms('item','ประเภทสินค้า')}
+      ${opt.admin?ms('account','บัญชีแฟรนไชส์'):''}
       <div class="field"><label>ค้นหา (เลข PO / สินค้า)</label><input id="rf_q" value="${esc(f.q)}" placeholder="เช่น PO2026… หรือ Yogurt"></div>
       <div class="field"><button class="btn gold" id="rf_go">ค้นหา</button></div>
       <div class="field"><button class="btn ghost" id="rf_clear" type="button">ล้างตัวกรอง</button></div>
@@ -1703,11 +1734,14 @@ function renderReport(el,opt){
   // summary numbers (rendered after to keep markup simple)
   const sm=el.querySelector('.rptsum');
   sm.innerHTML=`<div><div class="muted small th">จำนวน PO</div><b>${pos}</b></div><div><div class="muted small th">จำนวนรายการสินค้า</div><b>${rows.filter(r=>r.hasDetail).length}</b></div><div><div class="muted small th">ยอดรวม (บาท)</div><b>${fmtMoney(sum)}</b></div>`;
-  const read=()=>{f.from=$('#rf_from').value;f.to=$('#rf_to').value;f.branch=$('#rf_branch').value;f.item=$('#rf_item').value;f.q=$('#rf_q').value.trim();if(opt.admin)f.account=$('#rf_account').value};
+  const read=()=>{f.from=$('#rf_from').value;f.to=$('#rf_to').value;f.q=$('#rf_q').value.trim()};
+  mountMsel(el.querySelector('[data-ms=branch]'),(d?d.branches:[]).map(b=>[b,b]),f.branch,'ทั้งหมด');
+  mountMsel(el.querySelector('[data-ms=item]'),(d?d.items:[]).map(i=>[i.key,i.label]),f.item,'ทั้งหมด');
+  if(opt.admin)mountMsel(el.querySelector('[data-ms=account]'),(d&&d.accounts||[]).map(a=>[a.id,a.name+' ('+a.username+')']),f.account,'ทั้งหมด');
   const load=()=>{read();RPT.data=null;RPT.busy=false;renderReport(el,opt)};
   $('#rf_go').onclick=load;
   $('#rf_q').onkeydown=e=>{if(e.key==='Enter')load()};
-  $('#rf_clear').onclick=()=>{RPT.f={from:'',to:'',branch:'',item:'',q:'',account:''};load()};
+  $('#rf_clear').onclick=()=>{RPT.f=RPT_EMPTY();load()};
   $('#rf_csv').onclick=()=>{
     const head=['วันที่ส่ง','Ref','PO','สาขา (จาก PO)','ประเภท','วันที่ออก PO','ลำดับ','รายการสินค้า','จำนวน','หน่วย','VAT','ราคา','รวม','ผู้ออกใบสั่ง','บัญชี'];
     const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -1715,8 +1749,7 @@ function renderReport(el,opt){
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='po-report-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();
   };
   if(!d&&!RPT.busy){RPT.busy=true;
-    const qs=new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([k,v])=>v)));
-    opt.fetch(qs.toString()).then(j=>{RPT.busy=false;RPT.data=j;renderReport(el,opt)}).catch(e=>{RPT.busy=false;if(opt.on401&&e.status===401)return opt.on401();el.innerHTML=`<div class="card"><div class="empty th">โหลดรายงานไม่ได้ <span class="small muted">(${esc(e.message)})</span></div></div>`});
+    opt.fetch(rptQs(f)).then(j=>{RPT.busy=false;RPT.data=j;renderReport(el,opt)}).catch(e=>{RPT.busy=false;if(opt.on401&&e.status===401)return opt.on401();el.innerHTML=`<div class="card"><div class="empty th">โหลดรายงานไม่ได้ <span class="small muted">(${esc(e.message)})</span></div></div>`});
   }
 }
 function drawPortalReport(){

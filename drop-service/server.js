@@ -197,13 +197,14 @@ const bkkDay = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asi
 function buildReport(params, scope) {
   const lab = k => (DB.items.find(i => i.key === k) || {}).label || k;
   const from = cleanStr(params.get('from'), 10), to = cleanStr(params.get('to'), 10);
-  const branch = cleanStr(params.get('branch'), 120), item = cleanStr(params.get('item'), 40), account = cleanStr(params.get('account'), 40);
+  const many = k => params.getAll(k).map(v => cleanStr(v, 120)).filter(Boolean).slice(0, 200); // repeated params = multi-select
+  const branch = many('branch'), item = many('item'), account = many('account');
   const q = cleanStr(params.get('q'), 80).toLowerCase();
   const rows = [], branches = new Set();
   for (const d of scope.slice().reverse()) {
     if (d.branchName) branches.add(d.branchName);
     const day = bkkDay(d.createdAt);
-    if ((from && day < from) || (to && day > to) || (branch && d.branchName !== branch) || (item && d.item !== item) || (account && d.accountId !== account)) continue;
+    if ((from && day < from) || (to && day > to) || (branch.length && !branch.includes(d.branchName)) || (item.length && !item.includes(d.item)) || (account.length && !account.includes(d.accountId))) continue;
     const po = d.po, lines = po && po.lines && po.lines.length ? po.lines : [null];
     for (const l of lines) {
       const r = {
