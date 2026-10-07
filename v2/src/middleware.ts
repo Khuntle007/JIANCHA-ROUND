@@ -15,10 +15,12 @@ export function middleware(req: NextRequest) {
   if (PUBLIC.some(r => r.test(pathname))) return NextResponse.next();
   if (!req.cookies.get('jcr_session')) {
     if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'login required' }, { status: 401 });
-    const url = req.nextUrl.clone();
-    url.pathname = '/login';
-    url.search = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
-    return NextResponse.redirect(url);
+    // Behind nginx the app listens on 127.0.0.1:8094, so req.nextUrl carries that host — build the redirect
+    // from the public host the browser actually used.
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || req.nextUrl.host;
+    const proto = req.headers.get('x-forwarded-proto') || req.nextUrl.protocol.replace(':', '');
+    const next = pathname === '/' ? '' : `?next=${encodeURIComponent(pathname + req.nextUrl.search)}`;
+    return NextResponse.redirect(new URL('/login' + next, `${proto}://${host}`));
   }
   return NextResponse.next();
 }
