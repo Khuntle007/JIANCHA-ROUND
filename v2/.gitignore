@@ -2,7 +2,7 @@ node_modules/
 .next/
 .env
 .env.local
-data/
+/data/
 *.db
 *.db-journal
 next-env.d.ts

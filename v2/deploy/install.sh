@@ -14,7 +14,7 @@ if ss -ltn | grep -q '127.0.0.1:8094 ' && ! systemctl is-active --quiet jc-round
 
 install -d -m 755 $ROOT $APP
 install -d -m 700 -o www-data -g www-data $ROOT/data
-rsync -a --delete --exclude node_modules --exclude .next --exclude data --exclude .env "$SRC/" "$APP/"
+rsync -a --delete --exclude node_modules --exclude /.next --exclude /data --exclude /.env "$SRC/" "$APP/"
 
 if [ ! -f "$ENVF" ]; then
   ( umask 077

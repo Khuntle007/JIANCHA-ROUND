@@ -1,0 +1,51 @@
+seq,code,name,fromCode
+1,JF001,Fashion Island,JC002
+2,JF002,Central Pinklao,JC005
+3,JF003,The ParQ Rama4,JC008
+4,JF005,PTT Barom,JC010
+5,JF008,Gump's Cross,JC015
+6,JF010,Future Park,JC017
+7,JF012,The Up Rama3,JC006
+8,JF013,Icon Siam,JC020
+9,JF014,Central Hatyai,
+10,JF015,Central Rama 9,JC007
+11,JF016,G Tower,JC019
+12,JF017,One Bangkok,JC021
+13,JF018,The Mall Bangkae,JC025
+14,JF019,True Digital,JC024
+15,JF020,Unilever,JC022
+16,JF022,CW Tower,JC027
+17,JF023,Central Pattaya,JC052
+18,JF024,The Circle ราชพฤกษ์,JC029
+19,JF025,Central Eastville,JC028
+20,JF026,Esplanade Ngamwongwan-Khae Rai,JC033
+21,JF027,Central Westgate,JC031
+22,JF028,Thai Summit,JC035
+23,JF029,Seacon Bangkae,JC016
+24,JF033,Emporium,JC037
+25,JF035,Cosmo,JC039
+26,JF036,La Villa Ari,JC038
+27,JF037,Gateway Bangsue,JC032
+28,JF039,Maya Chiangmai,JC043
+29,JF041,Mercury Ville,JC042
+30,JF042,Sun Towers,JC041
+31,JF043,The Scene Town in Town,JC046
+32,JF045,Charn Avenue,JC013
+33,JF046,Ekkamai Corner,JC023
+34,JF048,Chula Samyan,JC047
+35,JF049,Market Place Dusit,JC050
+36,JF050,Passione Rayong,JC048
+37,JF051,Silom Complex,JC053
+38,JF052,Avenue Ratchayothin,JC045
+39,JF055,Central Nakhon Pathom,JC049
+40,JF056,Robinson Suvarnabhumi,JC055
+41,JF057,Market Place Prachauthit,JC051
+42,JF058,PTT Park Mall,JC058
+43,JF059,Red Spoon,JC056
+44,JF060,Or Space,JC057
+45,JF061,Robinson Samut Prakan,JC061
+46,JF062,Mega Bangna,JC014
+47,JF063,Lotus Bangna,
+48,JF064,Kanlapaphruek Market,JC059
+49,JF065,PTT Saimai 56,
+50,JF066,Mingle Kavalon,
