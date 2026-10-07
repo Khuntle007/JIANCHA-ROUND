@@ -5,41 +5,28 @@ import { api, toast, Modal, copyText, useConfirm } from '@/components/client';
 import { fmtDateTime } from '@/lib/dates';
 import { Report } from './Report';
 import { Products } from './Products';
+import { DropsList, type DropRow } from './DropsList';
 
-type Drop = { id: string; ref: string; poNumber: string; branchName: string; issuerName: string; item: string; fileName: string; size: number; sourceName: string; createdAt: string;
-  emailStatus: string; emailError: string; emailTo: string; notifiedAt: string | null; supplierName: string; chosenBy: string; pendingCode: string; options: { id: string; name: string }[]; lines: { name: string; qty: number; unit: string }[] };
+type Drop = DropRow & { notifiedAt: string | null; pendingCode: string; options: { id: string; name: string }[]; lines: { name: string; qty: number; unit: string }[] };
 type Link = { id: string; token: string; name: string; branchCode: string | null; active: boolean; createdBy: string | null; lastUsedAt: string | null };
-type Item = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; blocked: boolean };
+type Item = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; blocked: boolean; subjectTag: string; skipGlobalCc: boolean };
 type Bc = { configured: boolean; lastSyncAt?: string; count?: number; company?: string; error?: string; failedAt?: string };
-const fmtSize = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 const split = (v: string) => v.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
 
-function EmailChip({ d }: { d: Drop }) {
-  if (d.emailStatus === 'sent') return <span className="estat sent" title={(JSON.parse(d.emailTo || '[]') as string[]).join(', ')}>ส่งอีเมลแล้ว</span>;
-  if (d.emailStatus === 'dry-run') return <span className="estat wait" title="โหมดทดสอบ — ยังไม่ได้ส่งจริง">ทดสอบ (ไม่ส่งจริง)</span>;
-  if (d.emailStatus === 'failed') return <span className="estat failed" title={d.emailError}>ส่งไม่สำเร็จ</span>;
-  if (d.emailStatus === 'pending') return <span className="estat wait">รอเลือก supplier</span>;
-  if (d.emailStatus === 'blocked') return <span className="estat failed" title="สินค้าประเภทนี้ไม่รับผ่านระบบ — บันทึกไว้เท่านั้น ไม่ส่งต่อ">ไม่ส่งต่อ (บันทึกเท่านั้น)</span>;
-  return <span className="estat wait">กำลังส่ง…</span>;
-}
 
 type Tab = 'drops' | 'pending' | 'report' | 'products' | 'routing' | 'links';
 
 export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: string; mailFrom: string; dryRun: boolean; drops: Drop[]; links: Link[]; items: Item[];
-  settings: { scmEmails: string[]; reminderHours: number }; bc: Bc }) {
+  settings: { scmEmails: string[]; reminderHours: number; alwaysCc: string[] }; bc: Bc; branches: { code: string; name: string }[] }) {
   const router = useRouter();
   const pending = p.drops.filter(d => d.emailStatus === 'pending');
   const [tab, setTab] = useState<Tab>((['drops', 'pending', 'report', 'products', 'routing', 'links'] as Tab[]).includes(p.initialTab as Tab) ? (p.initialTab as Tab) : 'drops');
-  const [q, setQ] = useState(''), [itemF, setItemF] = useState('');
   const [editLink, setEditLink] = useState<Link | 'new' | null>(null);
-  const [routing, setRouting] = useState(() => p.items.map(i => ({ key: i.key, to: i.to.join(', '), cc: i.cc.join(', '), blocked: i.blocked })));
+  const [routing, setRouting] = useState(() => p.items.map(i => ({ key: i.key, to: i.to.join(', '), cc: i.cc.join(', '), blocked: i.blocked, subjectTag: i.subjectTag, skipGlobalCc: i.skipGlobalCc })));
   const [add, setAdd] = useState({ label: '', labelTh: '', to: '' });
   const [lq, setLq] = useState('');
   const { ask, node } = useConfirm();
-  const itemLabel = (k: string) => p.items.find(i => i.key === k)?.label || k;
   const linkUrl = (l: Link) => `${p.appUrl}/d/${l.token}`;
-  const ql = q.toLowerCase();
-  const rows = p.drops.filter(d => (!itemF || d.item === itemF) && (!ql || [d.ref, d.poNumber, d.branchName, d.issuerName, d.sourceName, d.fileName, d.supplierName].join(' ').toLowerCase().includes(ql)));
   const tabs: [Tab, string][] = [['drops', `ใบสั่งที่ได้รับ (${p.drops.length})`], ['pending', `รอเลือก supplier (${pending.length})`], ['report', 'รายงาน PO'], ['products', 'สินค้า & Supplier'], ['routing', 'ผู้รับตามประเภท'], ['links', `ลิงก์แฟรนไชส์ (${p.links.length})`]];
 
   return (
@@ -47,30 +34,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
       <div className="pagehead"><div><div className="kicker">SCM · Franchise</div><h1>External Order Drop</h1><div className="muted th small">ใบ PO (PDF) จากแฟรนไชส์ → อ่านข้อมูลจาก PDF → ส่งอีเมลถึง supplier อัตโนมัติจาก <b>{p.mailFrom}</b>{p.dryRun && <span style={{ color: 'var(--bad)' }}> · โหมดทดสอบ: ยังไม่ส่งอีเมลจริง</span>}</div></div></div>
       <div className="tabs">{tabs.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
 
-      {tab === 'drops' && <>
-        <div className="row" style={{ marginBottom: '.7rem' }}>
-          <div className="field" style={{ flex: 1, minWidth: 200, margin: 0 }}><input placeholder="ค้นหา PO / ref / สาขา / supplier…" value={q} onChange={e => setQ(e.target.value)} /></div>
-          <div className="field" style={{ margin: 0 }}><select value={itemF} onChange={e => setItemF(e.target.value)}><option value="">ทุกประเภท</option>{p.items.map(i => <option key={i.key} value={i.key}>{i.label}</option>)}</select></div>
-        </div>
-        <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
-          <thead><tr><th>วันที่</th><th>PO / Ref</th><th>สาขา (จาก PO)</th><th>ประเภท → supplier</th><th>ผู้ออก PO</th><th>ไฟล์</th><th>อีเมล</th><th /></tr></thead>
-          <tbody>{rows.length ? rows.map(d => (
-            <tr key={d.id}>
-              <td className="small" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(d.createdAt)}</td>
-              <td style={{ whiteSpace: 'nowrap' }}><b>{d.poNumber || '—'}</b><div className="small muted">{d.ref}</div></td>
-              <td className="th">{d.branchName}</td>
-              <td><span className="tag fc">{itemLabel(d.item)}</span>{d.supplierName && <div className="small">→ {d.supplierName}{d.chosenBy && <span className="muted"> (เลือกโดย {d.chosenBy})</span>}</div>}</td>
-              <td className="th small">{d.issuerName}<div className="muted">{d.sourceName}</div></td>
-              <td className="small"><a href={`/api/drops/${d.id}/file`} target="_blank" rel="noopener">{d.fileName}</a><div className="muted">{fmtSize(d.size)}</div></td>
-              <td><EmailChip d={d} /></td>
-              <td style={{ whiteSpace: 'nowrap' }}>
-                {d.emailStatus === 'blocked' ? null : d.emailStatus === 'pending' ? <button className="btn sm gold" onClick={() => setTab('pending')}>เลือก supplier</button>
-                  : <button className="btn sm ghost" onClick={async () => { try { const r = await api<{ emailStatus: string; emailError: string }>(`/api/drops/${d.id}/resend`, { method: 'POST' }); toast(r.emailStatus === 'failed' ? 'ส่งไม่สำเร็จ: ' + r.emailError : 'ส่งอีเมลแล้ว'); router.refresh(); } catch (e) { toast((e as Error).message); } }}>ส่งอีเมลซ้ำ</button>}
-                {p.isMain && <> <button className="btn sm ghost" onClick={() => ask('ลบใบสั่งนี้และไฟล์ PDF ถาวร?', async () => { await api(`/api/drops/${d.id}`, { method: 'DELETE' }); toast('ลบแล้ว'); router.refresh(); }, { danger: true, yes: 'ลบ' })}>ลบ</button></>}
-              </td>
-            </tr>
-          )) : <tr><td colSpan={8}><div className="empty th">ยังไม่มีใบสั่ง</div></td></tr>}</tbody></table></div></div>
-      </>}
+      {tab === 'drops' && <DropsList drops={p.drops} items={p.items} isMain={p.isMain} onChoose={() => setTab('pending')} />}
 
       {tab === 'pending' && <>
         {!pending.length && <div className="card"><div className="empty th">ไม่มีรายการที่รอเลือก supplier</div></div>}
@@ -92,17 +56,19 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
       </>}
 
       {tab === 'report' && <Report />}
-      {tab === 'products' && <Products settings={p.settings} bc={p.bc} />}
+      {tab === 'products' && <Products settings={p.settings} bc={p.bc} branches={p.branches} />}
 
       {tab === 'routing' && <>
-        <div className="card th small" style={{ marginBottom: '.8rem' }}>ใช้เมื่อ<b>รหัสสินค้าใน PO ยังไม่ได้ผูก supplier</b> — ระบบจับกลุ่มจาก<b>รหัสสินค้า</b>ก่อน แล้วจึงดูจากชื่อสินค้า แล้วส่งตามตารางนี้ (ถ้าผูก supplier แล้ว จะส่งตาม supplier ในแท็บ สินค้า & Supplier แทน) · “Other” เว้นว่างได้ = บันทึกไว้แต่ไม่ส่ง</div>
+        <div className="card th small" style={{ marginBottom: '.8rem' }}>ผู้รับในตารางนี้ใช้เมื่อ<b>รหัสสินค้าใน PO ยังไม่ได้ผูก supplier</b> (คำนำหน้า Subject และ “ไม่ใส่ CC กลาง” ใช้กับทุกอีเมลของประเภทนั้นเสมอ) — — ระบบจับกลุ่มจาก<b>รหัสสินค้า</b>ก่อน แล้วจึงดูจากชื่อสินค้า แล้วส่งตามตารางนี้ (ถ้าผูก supplier แล้ว จะส่งตาม supplier ในแท็บ สินค้า & Supplier แทน) · “Other” เว้นว่างได้ = บันทึกไว้แต่ไม่ส่ง</div>
         <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
-          <thead><tr><th>ประเภท</th><th>ไม่รับผ่านระบบ</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th></tr></thead>
+          <thead><tr><th>ประเภท</th><th>ไม่รับผ่านระบบ</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th><th>คำนำหน้า Subject</th><th>ไม่ใส่ CC กลาง</th></tr></thead>
           <tbody>{p.items.map((i, n) => (
             <tr key={i.key}><td><b>{i.label}</b><div className="small muted th">{i.labelTh}</div>{i.codes.length > 0 && <div className="small muted">รหัส {i.codes.join(', ')}</div>}</td>
               <td>{i.key !== 'other' && <label className="small th" style={{ display: 'flex', gap: '.4rem', alignItems: 'center' }} title="ติ๊ก = แฟรนไชส์ส่งไม่ได้ (แจ้งให้ติดต่อ Area Manager) — บันทึกไว้เท่านั้น ไม่ส่งต่อ"><input type="checkbox" checked={!!routing[n]?.blocked} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, blocked: e.target.checked } : x)))} /> บันทึกอย่างเดียว</label>}</td>
               <td style={{ minWidth: 220 }}><input style={{ width: '100%' }} disabled={!!routing[n]?.blocked} value={routing[n]?.to || ''} placeholder={i.key === 'other' ? 'ไม่บังคับ' : ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, to: e.target.value } : x)))} /></td>
-              <td style={{ minWidth: 180 }}><input style={{ width: '100%' }} placeholder="ไม่บังคับ" value={routing[n]?.cc || ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, cc: e.target.value } : x)))} /></td></tr>
+              <td style={{ minWidth: 180 }}><input style={{ width: '100%' }} placeholder="ไม่บังคับ" value={routing[n]?.cc || ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, cc: e.target.value } : x)))} /></td>
+              <td style={{ minWidth: 130 }}><input style={{ width: '100%' }} placeholder="เช่น FRUIT ORDER" value={routing[n]?.subjectTag || ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, subjectTag: e.target.value } : x)))} /></td>
+              <td style={{ textAlign: 'center' }}><input type="checkbox" aria-label="ไม่ใส่ CC กลาง" checked={!!routing[n]?.skipGlobalCc} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, skipGlobalCc: e.target.checked } : x)))} /></td></tr>
           ))}</tbody></table></div></div>
         <div className="card" style={{ marginTop: '.8rem' }}><div className="kicker" style={{ marginBottom: '.5rem' }}>+ เพิ่มประเภทสินค้า</div>
           <div className="row"><input placeholder="ชื่อ (EN) เช่น Ice hot creamer" value={add.label} onChange={e => setAdd({ ...add, label: e.target.value })} />
@@ -110,7 +76,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
             <input placeholder="อีเมลผู้รับ" value={add.to} onChange={e => setAdd({ ...add, to: e.target.value })} style={{ minWidth: 220 }} /></div></div>
         <div className="row" style={{ justifyContent: 'space-between', marginTop: '.7rem' }}><div className="small muted th">คั่นหลายอีเมลด้วย , · มีผลกับใบสั่งใหม่ทันที</div>
           <button className="btn gold" onClick={async () => { try {
-            await api('/api/drop-items', { method: 'PUT', body: { items: routing.map(r => ({ key: r.key, to: split(r.to), cc: split(r.cc), blocked: r.blocked })), ...(add.label.trim() ? { add: { label: add.label, labelTh: add.labelTh, to: split(add.to) } } : {}) } });
+            await api('/api/drop-items', { method: 'PUT', body: { items: routing.map(r => ({ key: r.key, to: split(r.to), cc: split(r.cc), blocked: r.blocked, subjectTag: r.subjectTag, skipGlobalCc: r.skipGlobalCc })), ...(add.label.trim() ? { add: { label: add.label, labelTh: add.labelTh, to: split(add.to) } } : {}) } });
             toast('บันทึกแล้ว'); setAdd({ label: '', labelTh: '', to: '' }); router.refresh(); location.reload();
           } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div>
       </>}

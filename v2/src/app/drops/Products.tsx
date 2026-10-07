@@ -1,23 +1,27 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { api, toast, Modal, useConfirm } from '@/components/client';
+import { MultiSelect } from '@/components/MultiSelect';
 import { fmtDateTime } from '@/lib/dates';
 
 type Sup = { id: string; name: string; to: string[]; cc: string[]; products: number };
-type Prod = { code: string; name: string; source: string; seen: boolean; bc: boolean; blocked: boolean; suppliers: { id: string; name: string }[] };
+type Link = { id: string; name: string; branches: string[] };
+type Prod = { code: string; name: string; source: string; seen: boolean; bc: boolean; blocked: boolean; suppliers: Link[] };
+type Br = { code: string; name: string };
 type Bc = { configured: boolean; lastSyncAt?: string; count?: number; company?: string; error?: string; failedAt?: string };
 const split = (v: string) => v.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
 
-export function Products({ settings, bc: bc0 }: { settings: { scmEmails: string[]; reminderHours: number }; bc: Bc }) {
+export function Products({ settings, bc: bc0, branches }: { settings: { scmEmails: string[]; reminderHours: number; alwaysCc: string[] }; bc: Bc; branches: Br[] }) {
   const [view, setView] = useState<'products' | 'suppliers'>('products');
   const [sups, setSups] = useState<Sup[]>([]), [prods, setProds] = useState<{ products: Prod[]; total: number; all: number } | null>(null), [q, setQ] = useState('');
   const [editP, setEditP] = useState<Prod | 'new' | null>(null), [editS, setEditS] = useState<Sup | 'new' | null>(null);
-  const [scm, setScm] = useState(settings.scmEmails.join(', ')), [hours, setHours] = useState(settings.reminderHours), [bc, setBc] = useState(bc0), [syncing, setSyncing] = useState(false);
+  const [alwaysCc, setAlwaysCc] = useState(settings.alwaysCc.join(', ')), [scm, setScm] = useState(settings.scmEmails.join(', ')), [hours, setHours] = useState(settings.reminderHours), [bc, setBc] = useState(bc0), [syncing, setSyncing] = useState(false);
   const { ask, node } = useConfirm();
   const loadS = useCallback(() => api<{ suppliers: Sup[] }>('/api/suppliers').then(r => setSups(r.suppliers)).catch(e => toast(e.message)), []);
   const loadP = useCallback((qq = q) => api<{ products: Prod[]; total: number; all: number }>('/api/products?q=' + encodeURIComponent(qq)).then(setProds).catch(e => toast(e.message)), [q]);
   useEffect(() => { loadS(); loadP(''); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const mode = (p: Prod) => (!p.suppliers.length ? <span className="muted">ยังไม่ผูก (ใช้กฎตามประเภท)</span> : p.suppliers.length === 1 ? <span className="estat sent">ส่งอัตโนมัติ</span> : <span className="estat wait">SCM ต้องเลือก</span>);
+  const mode = (p: Prod) => { const def = p.suppliers.filter(s => !s.branches.length).length; const br = p.suppliers.some(s => s.branches.length);
+    return !p.suppliers.length ? <span className="muted">ยังไม่ผูก (ใช้กฎตามประเภท)</span> : def > 1 ? <span className="estat wait">SCM ต้องเลือก</span> : <span className="estat sent">ส่งอัตโนมัติ{br ? ' · แยกตามสาขา' : ''}</span>; };
 
   return (
     <>
@@ -28,10 +32,12 @@ export function Products({ settings, bc: bc0 }: { settings: { scmEmails: string[
 
       {view === 'products' && <>
         <div className="grid2" style={{ gap: '.8rem', marginBottom: '.8rem' }}>
-          <div className="card"><div className="kicker" style={{ marginBottom: '.4rem' }}>แจ้งเตือน SCM (สินค้าที่มีหลาย supplier)</div>
+          <div className="card"><div className="kicker" style={{ marginBottom: '.4rem' }}>อีเมลกลาง</div>
+            <div className="field"><label>CC ทุกอีเมลที่ส่งถึง supplier (ยกเว้นประเภทที่ติ๊ก “ไม่ใส่ CC กลาง”)</label><input value={alwaysCc} onChange={e => setAlwaysCc(e.target.value)} placeholder="Malichat.no@jianchatea.com, scm.admin@jianchatea.com" /></div>
+            <div className="kicker" style={{ margin: '.6rem 0 .4rem' }}>แจ้งเตือน SCM (สินค้าที่มีหลาย supplier)</div>
             <div className="field"><label>อีเมล SCM</label><input value={scm} placeholder="scm@jianchatea.com" onChange={e => setScm(e.target.value)} /></div>
             <div className="row"><div className="field" style={{ margin: 0 }}><label>เตือนซ้ำทุก (ชม., 0 = ไม่เตือน)</label><input type="number" min={0} max={720} value={hours} onChange={e => setHours(+e.target.value)} style={{ width: 100 }} /></div>
-              <button className="btn sm gold" style={{ alignSelf: 'flex-end' }} onClick={async () => { try { await api('/api/drop-settings', { method: 'PUT', body: { scmEmails: split(scm), reminderHours: hours } }); toast('บันทึกแล้ว'); } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div></div>
+              <button className="btn sm gold" style={{ alignSelf: 'flex-end' }} onClick={async () => { try { await api('/api/drop-settings', { method: 'PUT', body: { scmEmails: split(scm), reminderHours: hours, alwaysCc: split(alwaysCc) } }); toast('บันทึกแล้ว'); } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div></div>
           <div className="card"><div className="kicker" style={{ marginBottom: '.4rem' }}>Business Central</div>
             {bc.configured ? <div className="small th">
               {bc.lastSyncAt ? <>ซิงก์ล่าสุด {fmtDateTime(bc.lastSyncAt)} · {bc.count} รหัส · {bc.company}</> : 'ยังไม่เคยซิงก์'}
@@ -53,7 +59,7 @@ export function Products({ settings, bc: bc0 }: { settings: { scmEmails: string[
           <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>Supplier</th><th>การส่ง</th><th /></tr></thead>
           <tbody>{prods?.products.length ? prods.products.map(p => (
             <tr key={p.code}><td><code>{p.code}</code></td><td className="th small">{p.name}{p.blocked && <span className="estat failed" style={{ marginLeft: 6 }}>blocked</span>}<div className="muted">{p.source === 'bc' ? 'BC' : p.source === 'manual' ? 'เพิ่มเอง' : 'จาก PO'}</div></td>
-              <td className="small">{p.suppliers.map(s => <span key={s.id} className="chip">{s.name}</span>)}</td><td className="small">{mode(p)}</td>
+              <td className="small">{p.suppliers.map(s => <div key={s.id}><span className="chip">{s.name}</span> <span className="muted">{s.branches.length ? 'เฉพาะ ' + s.branches.join(', ') : 'ค่าเริ่มต้น (สาขาอื่นทั้งหมด)'}</span></div>)}</td><td className="small">{mode(p)}</td>
               <td><button className="btn sm ghost" onClick={() => setEditP(p)}>แก้</button></td></tr>
           )) : <tr><td colSpan={5}><div className="empty th">ยังไม่มีรหัสสินค้า — จะขึ้นเองเมื่อมีใบ PO เข้ามา</div></td></tr>}</tbody></table></div></div>
       </>}
@@ -70,7 +76,7 @@ export function Products({ settings, bc: bc0 }: { settings: { scmEmails: string[
       </>}
 
       {editS && <SupplierModal s={editS === 'new' ? null : editS} onClose={() => setEditS(null)} onSaved={() => { setEditS(null); loadS(); loadP(); }} />}
-      {editP && <ProductModal p={editP === 'new' ? null : editP} sups={sups} onNewSupplier={loadS} onClose={() => setEditP(null)} onSaved={() => { setEditP(null); loadP(); loadS(); }} />}
+      {editP && <ProductModal p={editP === 'new' ? null : editP} sups={sups} branches={branches} onNewSupplier={loadS} onClose={() => setEditP(null)} onSaved={() => { setEditP(null); loadP(); loadS(); }} />}
       {node}
     </>
   );
@@ -93,20 +99,23 @@ function SupplierModal({ s, onClose, onSaved }: { s: Sup | null; onClose: () => 
   );
 }
 
-function ProductModal({ p, sups, onNewSupplier, onClose, onSaved }: { p: Prod | null; sups: Sup[]; onNewSupplier: () => void; onClose: () => void; onSaved: () => void }) {
-  const [code, setCode] = useState(p?.code || ''), [name, setName] = useState(p?.name || ''), [sel, setSel] = useState<string[]>(p?.suppliers.map(s => s.id) || []), [sq, setSq] = useState(''), [newSup, setNewSup] = useState(false);
+function ProductModal({ p, sups, branches, onNewSupplier, onClose, onSaved }: { p: Prod | null; sups: Sup[]; branches: Br[]; onNewSupplier: () => void; onClose: () => void; onSaved: () => void }) {
+  const [code, setCode] = useState(p?.code || ''), [name, setName] = useState(p?.name || ''), [sel, setSel] = useState<string[]>(p?.suppliers.map(s => s.id) || []), [scope, setScope] = useState<Record<string, string[]>>(() => Object.fromEntries((p?.suppliers || []).map(s => [s.id, s.branches]))), [sq, setSq] = useState(''), [newSup, setNewSup] = useState(false);
   return (
     <Modal title={p ? `รหัสสินค้า ${p.code}` : 'เพิ่มรหัสสินค้า'} onClose={onClose}>
       <div className="grid2"><div className="field"><label>รหัส</label><input value={code} disabled={!!p} onChange={e => setCode(e.target.value)} placeholder="เช่น 030013" /></div>
         <div className="field"><label>ชื่อสินค้า</label><input value={name} onChange={e => setName(e.target.value)} /></div></div>
-      <div className="field"><label>Supplier (1 = ส่งอัตโนมัติ · มากกว่า 1 = SCM เลือกทุกครั้ง)</label>
+      <div className="field"><label>Supplier · ไม่ระบุสาขา = ค่าเริ่มต้นของทุกสาขา · ระบุสาขา = ใช้กับสาขานั้นแทนค่าเริ่มต้น (ค่าเริ่มต้นมากกว่า 1 ราย = SCM เลือก)</label>
         <input placeholder="ค้นหา supplier…" value={sq} onChange={e => setSq(e.target.value)} style={{ marginBottom: '.4rem' }} />
         <div className="scopebox">{sups.filter(s => !sq || s.name.toLowerCase().includes(sq.toLowerCase())).map(s => (
-          <label key={s.id}><input type="checkbox" checked={sel.includes(s.id)} onChange={e => setSel(e.target.checked ? [...sel, s.id] : sel.filter(x => x !== s.id))} /> {s.name} <span className="muted small">{s.to.join(', ')}</span></label>
+          <div key={s.id} style={{ padding: '.2rem 0', borderBottom: '1px solid var(--jc-border)' }}>
+            <label><input type="checkbox" checked={sel.includes(s.id)} onChange={e => setSel(e.target.checked ? [...sel, s.id] : sel.filter(x => x !== s.id))} /> {s.name} <span className="muted small">{s.to.join(', ')}</span></label>
+            {sel.includes(s.id) && <div style={{ margin: '.2rem 0 .3rem 1.5rem', maxWidth: 320 }}><MultiSelect label="เฉพาะสาขา (ว่าง = ค่าเริ่มต้นทุกสาขา)" options={branches.map(b => ({ value: b.code, label: `${b.code} ${b.name}` }))} value={scope[s.id] || []} onChange={v => setScope(x => ({ ...x, [s.id]: v }))} /></div>}
+          </div>
         ))}{!sups.length && <div className="small muted">ยังไม่มี supplier</div>}</div>
         <button className="btn sm ghost" style={{ marginTop: '.4rem' }} onClick={() => setNewSup(true)}>+ supplier ใหม่</button></div>
       <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn ghost" onClick={onClose}>ยกเลิก</button>
-        <button className="btn gold" onClick={async () => { try { await api(`/api/products/${encodeURIComponent(code.trim())}`, { method: 'PUT', body: { name, supplierIds: sel } }); toast('บันทึกแล้ว'); onSaved(); } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div>
+        <button className="btn gold" onClick={async () => { try { await api(`/api/products/${encodeURIComponent(code.trim())}`, { method: 'PUT', body: { name, suppliers: sel.map(id => ({ id, branches: scope[id] || [] })) } }); toast('บันทึกแล้ว'); onSaved(); } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div>
       {newSup && <SupplierModal s={null} onClose={() => setNewSup(false)} onSaved={id => { setNewSup(false); onNewSupplier(); if (id) setSel(x => [...x, id]); }} />}
     </Modal>
   );

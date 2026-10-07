@@ -219,3 +219,7 @@ select.slotsel{padding:.3em .4em;border:1px solid var(--jc-border);border-radius
 
 .callayout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:1.2rem;align-items:start}
 @media(max-width:900px){.callayout{grid-template-columns:1fr}}
+tr.filters th{background:#fff;padding:.3rem .35rem;text-transform:none;letter-spacing:0;font-weight:400}
+tr.filters input,tr.filters select{width:100%;min-width:70px;padding:.3em .4em;border:1px solid var(--jc-border);font-size:.75rem;font-family:var(--jc-font-thai);background:#fff}
+tr.filters input[type=date]{min-width:118px;display:block;margin-bottom:2px}
+th[aria-sort]:hover{color:var(--jc-ink)}

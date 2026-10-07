@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { prisma } from './db';
 import { env } from './env';
-import { hmac, safeEqual, sha256 } from './crypto';
+import { hmac, safeEqual, sha256, randomToken } from './crypto';
 import { sendMail, escHtml, brandHead } from './mail';
 import { OTHER_KEY, ITEM_GROUPS, OTHER_GROUP, normName, emailOk } from './drop-catalog';
 import { todayISO } from './dates';
@@ -16,7 +16,7 @@ const J = <T>(s: string | null | undefined, d: T): T => { try { return s ? (JSON
 export type Route =
   | { kind: 'supplier'; supplierId: string; supplierName: string; to: string[]; cc: string[]; chosenBy?: string; chosenAt?: string }
   | { kind: 'pending'; code: string; options: { id: string; name: string; to: string[]; cc: string[] }[] };
-export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; words: string[]; blocked: boolean; sort: number };
+export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; words: string[]; blocked: boolean; subjectTag: string; skipGlobalCc: boolean; sort: number };
 
 export const filesDir = () => { const d = path.join(env.dataDir, 'files'); fs.mkdirSync(d, { recursive: true }); return d; };
 export const dropFile = (id: string) => path.join(filesDir(), `${id}.pdf`);
@@ -26,7 +26,7 @@ export const parsePoJson = (s: string | null) => J<PoData | null>(s, null);
 /** Item groups, seeding the defaults on first use. 'other' always exists and is last. */
 export async function itemTypes(): Promise<ItemTypeRow[]> {
   if (!(await prisma.itemType.count()))
-    await prisma.itemType.createMany({ data: [...ITEM_GROUPS, OTHER_GROUP].map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', codes: JSON.stringify(i.codes), words: JSON.stringify(i.words), blocked: !!i.blocked, sort: i.key === OTHER_KEY ? 9999 : n })) });
+    await prisma.itemType.createMany({ data: [...ITEM_GROUPS, OTHER_GROUP].map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', codes: JSON.stringify(i.codes), words: JSON.stringify(i.words), blocked: !!i.blocked, subjectTag: i.subjectTag || '', skipGlobalCc: !!i.skipGlobalCc, sort: i.key === OTHER_KEY ? 9999 : n })) });
   if (!(await prisma.itemType.findUnique({ where: { key: OTHER_KEY } })))
     await prisma.itemType.create({ data: { key: OTHER_KEY, label: OTHER_GROUP.label, labelTh: OTHER_GROUP.labelTh, sort: 9999 } });
   return (await prisma.itemType.findMany({ orderBy: { sort: 'asc' } })).map(i => ({ ...i, to: J<string[]>(i.to, []), cc: J<string[]>(i.cc, []), codes: J<string[]>(i.codes, []), words: J<string[]>(i.words, []) }));
@@ -39,6 +39,18 @@ export function itemForLine(name: string, items: Pick<ItemTypeRow, 'key' | 'labe
   const n = normName(name);
   const hit = items.find(i => i.key !== OTHER_KEY && [i.label, i.labelTh, ...i.words].some(w => normName(w).length >= 2 && n.includes(normName(w))));
   return hit ? hit.key : OTHER_KEY;
+}
+
+/** Branch-specific suppliers win; otherwise suppliers with no branch list are the default for every branch. */
+export function pickSuppliers<T extends { branches: string[] }>(all: T[], branchCode?: string | null): T[] {
+  const specific = branchCode ? all.filter(x => x.branches.includes(branchCode)) : [];
+  return specific.length ? specific : all.filter(x => !x.branches.length);
+}
+
+/** CC = route CC + always-CC, without duplicates and without anyone already in To. */
+export function mergeCc(to: string[], cc: string[], always: string[]) {
+  const seen = new Set(to.map(e => e.toLowerCase()));
+  return [...cc, ...always].filter(e => { const k = e.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 async function nextSeq(): Promise<number> {
@@ -69,7 +81,8 @@ export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileNam
         include: { suppliers: { include: { supplier: true } } },
       });
       if (!p.name) await prisma.product.update({ where: { code }, data: { name: stripCode(l.name) } });
-      sups = p.suppliers.map(x => ({ id: x.supplier.id, name: x.supplier.name, to: J<string[]>(x.supplier.to, []), cc: J<string[]>(x.supplier.cc, []) })).filter(x => x.to.length);
+      sups = pickSuppliers(p.suppliers.map(x => ({ id: x.supplier.id, name: x.supplier.name, to: J<string[]>(x.supplier.to, []), cc: J<string[]>(x.supplier.cc, []), branches: J<string[]>(x.branches, []) })), opts.link.branchCode)
+        .filter(x => x.to.length).map(({ branches: _b, ...x }) => x);
     }
     let key: string, route: Route | null = null;
     if (sups.length === 1) { route = { kind: 'supplier', supplierId: sups[0].id, supplierName: sups[0].name, to: sups[0].to, cc: sups[0].cc }; key = 'to:' + [...sups[0].to].sort().join(','); }
@@ -86,7 +99,7 @@ export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileNam
     const d = await prisma.drop.create({ data: {
       ref: `OD-${ymd}-${String(await nextSeq()).padStart(4, '0')}`, linkId: opts.link.id, sourceName: opts.link.name, branchCode: opts.link.branchCode || '',
       branchName: po.buyer || '-', issuerName: po.issuedBy || opts.link.name, item: g.item, fileName: opts.fileName, size: buf.length, sha256: hash,
-      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: blocked ? 'blocked' : pending ? 'pending' : 'queued', ip: opts.ip,
+      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: blocked ? 'blocked' : pending ? 'pending' : 'queued', ip: opts.ip, openToken: blocked ? null : randomToken(16),
     } });
     fs.writeFileSync(dropFile(d.id), buf, { mode: 0o600 });
     out.push({ id: d.id, ref: d.ref, item: g.item, pending, blocked });
@@ -111,7 +124,7 @@ const shell = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-s
 type DropRow = NonNullable<Awaited<ReturnType<typeof prisma.drop.findUnique>>>;
 function buildMail(d: DropRow, item: ItemTypeRow) {
   const po = parsePoJson(d.po);
-  const subject = `[JIANCHA Order Drop] ${item.label} · ${po ? (po.buyer || d.branchName) + ' · ' + po.number : d.branchName} · ${d.ref}`;
+  const subject = `${item.subjectTag ? `[${item.subjectTag}] ` : ''}[JIANCHA Order Drop] ${item.label} · ${po ? (po.buyer || d.branchName) + ' · ' + po.number : d.branchName} · ${d.ref}`;
   const big = d.size > ATTACH_MAX;
   const when = d.createdAt.toLocaleString('en-GB', { timeZone: 'Asia/Bangkok' });
   const row = (k: string, v: string) => (v ? `<tr><td style="padding:5px 14px 5px 0;color:#525252;font-size:12px;letter-spacing:.06em;text-transform:uppercase;vertical-align:top">${k}</td><td style="padding:5px 0;font-size:14px;color:#181818"><b>${v}</b></td></tr>` : '');
@@ -139,7 +152,8 @@ function buildMail(d: DropRow, item: ItemTypeRow) {
   }
   const html = shell(`<p style="margin:0 0 12px;font-size:14px">มีใบสั่งซื้อใหม่จากสาขาแฟรนไชส์ / New franchise order received.</p>
    <table style="border-collapse:collapse">${head}</table>${body}
-   ${big ? `<p style="margin:16px 0 0"><a href="${signedFileUrl(d.id)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ไฟล์ใหญ่เกินแนบอีเมล — ลิงก์ใช้ได้ 14 วัน / File too large to attach — link valid 14 days.</span></p>` : `<p style="font-size:12px;color:#525252;margin:14px 0 0">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}`);
+   ${big ? `<p style="margin:16px 0 0"><a href="${signedFileUrl(d.id)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ไฟล์ใหญ่เกินแนบอีเมล — ลิงก์ใช้ได้ 14 วัน / File too large to attach — link valid 14 days.</span></p>` : `<p style="font-size:12px;color:#525252;margin:14px 0 0">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}
+   ${d.openToken ? `<img src="${env.appUrl}/api/public/open/${d.openToken}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px">` : ''}`);
   return { subject, html, big };
 }
 
@@ -149,13 +163,15 @@ export async function deliverDrop(id: string) {
   await prisma.drop.update({ where: { id }, data: { emailStatus: 'sending', emailAttempts: { increment: 1 } } });
   try {
     const items = await itemTypes();
-    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], codes: [], words: [], blocked: false, sort: 0 };
+    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], codes: [], words: [], blocked: false, subjectTag: '', skipGlobalCc: false, sort: 0 };
     const route = parseRoute(d.route);
     const rec = route?.kind === 'supplier' ? route : item; // supplier from product code wins over item-type recipients
     if (!rec.to.length) throw new Error('no recipient configured for ' + (route?.kind === 'supplier' ? route.supplierName : 'item ' + d.item));
+    const cc = mergeCc(rec.to, rec.cc, item.skipGlobalCc ? [] : (await dropSettings()).alwaysCc);
+    if (!d.openToken) await prisma.drop.update({ where: { id }, data: { openToken: randomToken(16) } }).then(x => { d.openToken = x.openToken; });
     const { subject, html, big } = buildMail(d, item);
-    const r = await sendMail({ to: rec.to, cc: rec.cc, subject, html, attachments: big ? [] : [{ name: d.fileName, contentType: 'application/pdf', content: fs.readFileSync(dropFile(d.id)) }] });
-    await prisma.drop.update({ where: { id }, data: { emailStatus: r.dryRun ? 'dry-run' : 'sent', emailTo: JSON.stringify(rec.to), emailCc: JSON.stringify(rec.cc), emailSentAt: new Date(), emailError: '' } });
+    const r = await sendMail({ to: rec.to, cc, subject, html, attachments: big ? [] : [{ name: d.fileName, contentType: 'application/pdf', content: fs.readFileSync(dropFile(d.id)) }] });
+    await prisma.drop.update({ where: { id }, data: { emailStatus: r.dryRun ? 'dry-run' : 'sent', emailTo: JSON.stringify(rec.to), emailCc: JSON.stringify(cc), emailSentAt: new Date(), emailError: '' } });
   } catch (e) {
     console.error('[drop mail]', d.ref, e);
     await prisma.drop.update({ where: { id }, data: { emailStatus: 'failed', emailError: String((e as Error).message || e).slice(0, 400) } });

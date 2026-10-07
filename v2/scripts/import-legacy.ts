@@ -9,7 +9,7 @@ import { cleanSlots } from '../src/lib/domain';
 import { isISODate } from '../src/lib/dates';
 import { ITEM_GROUPS, OTHER_KEY, normName } from '../src/lib/drop-catalog';
 import { applyItemGroups } from '../src/lib/item-groups';
-import { saveDropSettings, saveBcStatus } from '../src/lib/settings';
+import { saveDropSettings, saveBcStatus, dropSettings } from '../src/lib/settings';
 import { ensureRoles } from './seed-admin';
 
 const arg = (k: string) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : undefined; };
@@ -94,7 +94,7 @@ async function importDrops(dropDir: string, replace: boolean) {
   }
   // settings — the live default 'xxx@gmail.com' is a placeholder, never import it
   const st = db.settings || {};
-  await saveDropSettings({ scmEmails: (st.scmEmails || []).filter((e: string) => e && e !== 'xxx@gmail.com'), reminderHours: Number(st.reminderHours) || 0 });
+  await saveDropSettings({ ...(await dropSettings()), scmEmails: (st.scmEmails || []).filter((e: string) => e && e !== 'xxx@gmail.com'), reminderHours: Number(st.reminderHours) || 0 });
   if (st.bc) await saveBcStatus(st.bc);
   // drops
   const filesOut = path.join(env.dataDir, 'files'); fs.mkdirSync(filesOut, { recursive: true });

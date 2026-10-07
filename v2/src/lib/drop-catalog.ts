@@ -2,7 +2,7 @@
 // A PO line joins a group by product code first, then by name keyword; otherwise 'other' (catch-all, may have no recipients).
 export const OTHER_KEY = 'other';
 
-export type ItemGroupDef = { key: string; label: string; labelTh: string; codes: string[]; words: string[]; to: string[]; blocked?: boolean };
+export type ItemGroupDef = { key: string; label: string; labelTh: string; codes: string[]; words: string[]; to: string[]; blocked?: boolean; subjectTag?: string; skipGlobalCc?: boolean };
 
 /** Shown to the franchise when a PO contains an item that must not go through this portal. */
 export const BLOCKED_MESSAGE = 'การจัดส่งไม่สำเร็จเนื่องจากสินค้าประเภทนี้ไม่สามารถจัดส่งผ่านระบบนี้ได้ กรุณาติดต่อ Area Manager';
@@ -15,7 +15,7 @@ export const ITEM_GROUPS: ItemGroupDef[] = [
   { key: 'fresh_milk', label: 'Fresh milk', labelTh: 'นมสด', codes: ['030024'], words: ['fresh milk', 'นมสด'], to: [], blocked: true },
   { key: 'ice_hot_creamer', label: 'Ice hot creamer', labelTh: 'ไอซ์ฮอต ครีมเมอร์', codes: ['030012'], words: ['ice hot', 'icehot', 'ไอซ์ฮอต'], to: ['Chakrit.ji@jianchatea.com'] },
   // fruits: by code only (+ the word "fruit") — fruit names also appear in syrups / powders
-  { key: 'fruits', label: 'Fruits', labelTh: 'ผลไม้', codes: ['010001', '010006', '010010', '010011', '010012', '010016', '010039', '010044', '010045', '010003', '010002'], words: ['fruit', 'ผลไม้'], to: ['Chakrit.ji@jianchatea.com'] },
+  { key: 'fruits', label: 'Fruits', labelTh: 'ผลไม้', codes: ['010001', '010006', '010010', '010011', '010012', '010016', '010039', '010044', '010045', '010003', '010002'], words: ['fruit', 'ผลไม้'], to: ['Malichat.no@jianchatea.com', 'scm.admin@jianchatea.com'], subjectTag: 'FRUIT ORDER', skipGlobalCc: true },
 ];
 export const OTHER_GROUP: ItemGroupDef = { key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', codes: [], words: [], to: [] };
 /** pre-2026-10-07 keys → current group */

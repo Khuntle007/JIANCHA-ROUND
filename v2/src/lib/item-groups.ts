@@ -18,7 +18,7 @@ export async function applyItemGroups() {
     const legacy = existing.filter(e => LEGACY_ITEM[e.key] === g.key);
     const to = cur ? J(cur.to) : legacy.length ? uniq(legacy.flatMap(l => J(l.to))) : g.to;
     const cc = cur ? J(cur.cc) : uniq(legacy.flatMap(l => J(l.cc)));
-    const data = { label: g.label, labelTh: g.labelTh, codes: JSON.stringify(g.codes), words: JSON.stringify(g.words), blocked: !!g.blocked, sort: n, to: JSON.stringify(g.blocked ? [] : to.length ? to : g.to), cc: JSON.stringify(g.blocked ? [] : cc) };
+    const data = { label: g.label, labelTh: g.labelTh, codes: JSON.stringify(g.codes), words: JSON.stringify(g.words), blocked: !!g.blocked, subjectTag: g.subjectTag || '', skipGlobalCc: !!g.skipGlobalCc, sort: n, to: JSON.stringify(g.blocked ? [] : to.length ? to : g.to), cc: JSON.stringify(g.blocked ? [] : cc) };
     await prisma.itemType.upsert({ where: { key: g.key }, create: { key: g.key, ...data }, update: data });
     log.push(`${g.key}: ${g.label} → ${g.blocked ? '(record only — never forwarded)' : (to.length ? to : g.to).join(', ') + (cc.length ? ' cc ' + cc.join(', ') : '')}`);
   }

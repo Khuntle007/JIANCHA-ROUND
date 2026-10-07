@@ -11,5 +11,5 @@ export const GET = route(async (req: Request) => {
     prisma.product.findMany({ where, orderBy: { code: 'asc' }, take: 100, include: { suppliers: { include: { supplier: true } } } }),
     prisma.product.count({ where }), prisma.product.count(),
   ]);
-  return json({ total, all, products: rows.map(p => ({ code: p.code, name: p.name, source: p.source, seen: p.seen, bc: p.bc, blocked: p.blocked, suppliers: p.suppliers.map(x => ({ id: x.supplier.id, name: x.supplier.name })) })) });
+  return json({ total, all, products: rows.map(p => ({ code: p.code, name: p.name, source: p.source, seen: p.seen, bc: p.bc, blocked: p.blocked, suppliers: p.suppliers.map(x => ({ id: x.supplier.id, name: x.supplier.name, branches: JSON.parse(x.branches) as string[] })) })) });
 });

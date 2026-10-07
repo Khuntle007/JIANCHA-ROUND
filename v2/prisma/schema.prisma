@@ -223,6 +223,10 @@ model Drop {
   emailError    String    @default("")
   notifiedAt    DateTime?
   notifyError   String    @default("")
+  openToken     String?   @unique // tracking-image token in the supplier email
+  openedAt      DateTime? // first time the tracking image loaded (indication only)
+  lastOpenedAt  DateTime?
+  openCount     Int       @default(0)
   ip            String?
   createdAt     DateTime  @default(now())
 
@@ -240,6 +244,8 @@ model ItemType {
   codes   String @default("[]") // product codes that always belong to this group (checked first)
   words   String @default("[]") // extra name keywords (besides label / labelTh)
   blocked Boolean @default(false) // not accepted via the portal: recorded only, never forwarded (e.g. fresh milk)
+  subjectTag   String  @default("") // prefix added to the email subject, e.g. "FRUIT ORDER"
+  skipGlobalCc Boolean @default(false) // do not add the always-CC addresses (e.g. fruits already go to them)
   sort    Int    @default(0)
 }
 
@@ -271,6 +277,7 @@ model ProductSupplier {
   product     Product  @relation(fields: [productCode], references: [code], onDelete: Cascade)
   supplierId  String
   supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  branches    String   @default("[]") // JSON branch codes this supplier serves for this product; [] = default for all other branches
 
   @@id([productCode, supplierId])
 }

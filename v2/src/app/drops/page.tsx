@@ -11,19 +11,21 @@ export const dynamic = 'force-dynamic';
 
 export default async function DropsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const u = await requirePage('orderDrop', '/drops');
-  const [drops, links, items, settings, bc] = await Promise.all([
+  const [drops, links, items, settings, bc, branches] = await Promise.all([
     prisma.drop.findMany({ orderBy: { createdAt: 'desc' }, take: 1000 }),
     prisma.dropLink.findMany({ orderBy: [{ branchCode: 'asc' }, { createdAt: 'asc' }] }),
     itemTypes(), dropSettings(), bcStatus(),
+    prisma.branch.findMany({ where: { active: true }, orderBy: { code: 'asc' }, select: { code: true, nameEn: true } }),
   ]);
   return (
     <Shell user={u} active="/drops">
       <DropsAdmin initialTab={(await searchParams).tab} isMain={u.role.key === 'MAIN_ADMIN'} appUrl={env.appUrl} mailFrom={env.mailSender} dryRun={env.mailDryRun}
-        settings={settings} bc={{ ...bc, configured: bcConfigured() }} items={items}
+        settings={settings} bc={{ ...bc, configured: bcConfigured() }} items={items} branches={branches.map(b => ({ code: b.code, name: b.nameEn }))}
         drops={drops.map(d => {
           const po = parsePoJson(d.po), r = parseRoute(d.route);
-          return { id: d.id, ref: d.ref, poNumber: d.poNumber, branchName: d.branchName, issuerName: d.issuerName, item: d.item, fileName: d.fileName, size: d.size, sourceName: d.sourceName,
-            createdAt: d.createdAt.toISOString(), emailStatus: d.emailStatus, emailError: d.emailError, emailTo: d.emailTo, notifiedAt: d.notifiedAt?.toISOString() || null,
+          return { id: d.id, ref: d.ref, poNumber: d.poNumber, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, item: d.item, fileName: d.fileName, size: d.size, sourceName: d.sourceName,
+            createdAt: d.createdAt.toISOString(), emailStatus: d.emailStatus, emailError: d.emailError, emailTo: d.emailTo, emailCc: d.emailCc, notifiedAt: d.notifiedAt?.toISOString() || null,
+            openedAt: d.openedAt?.toISOString() || null, lastOpenedAt: d.lastOpenedAt?.toISOString() || null, openCount: d.openCount,
             supplierName: r?.kind === 'supplier' ? r.supplierName : '', chosenBy: r?.kind === 'supplier' ? r.chosenBy || '' : '',
             pendingCode: r?.kind === 'pending' ? r.code : '', options: r?.kind === 'pending' ? r.options.map(o => ({ id: o.id, name: o.name })) : [],
             lines: po?.lines.map(l => ({ name: l.name, qty: l.qty, unit: l.unit })) || [] };

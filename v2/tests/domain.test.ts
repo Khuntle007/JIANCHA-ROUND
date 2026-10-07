@@ -5,7 +5,7 @@ import { effectivePerms, parsePerms, SYSTEM_ROLES } from '@/lib/perms';
 import { passwordProblem } from '@/lib/auth-rules';
 import { emailOk, ITEM_GROUPS, OTHER_KEY } from '@/lib/drop-catalog';
 import { parsePo, codeOf } from '@/lib/po';
-import { itemForLine } from '@/lib/drop';
+import { itemForLine, pickSuppliers, mergeCc } from '@/lib/drop';
 import fs from 'fs';
 import path from 'path';
 
@@ -86,4 +86,16 @@ describe('order drop', () => {
     expect(po.total).toBe(5000); expect(po.grand).toBe(5000); expect(po.vatRate).toBe('0');
     expect(po.buyer).toBeTruthy(); expect(po.issuedDate).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
+});
+
+describe('branch-specific suppliers + CC', () => {
+  const sups = [
+    { id: 'gpwc', branches: [] as string[] }, { id: 'panfood', branches: ['JF050', 'JF055', 'JF039'] }, { id: 'rwp', branches: ['JF023'] },
+  ];
+  it('branch-specific supplier wins', () => { expect(pickSuppliers(sups, 'JF023').map(s => s.id)).toEqual(['rwp']); expect(pickSuppliers(sups, 'JF055').map(s => s.id)).toEqual(['panfood']); });
+  it('other branches get the default', () => { expect(pickSuppliers(sups, 'JF001').map(s => s.id)).toEqual(['gpwc']); expect(pickSuppliers(sups, null).map(s => s.id)).toEqual(['gpwc']); });
+  it('CC merges always-CC, drops duplicates and anyone in To', () => {
+    expect(mergeCc(['a@x.co'], ['b@x.co'], ['B@x.co', 'c@x.co', 'A@x.co'])).toEqual(['b@x.co', 'c@x.co']);
+  });
+  it('fruits: FRUIT ORDER tag and no global CC', () => { const fr = ITEM_GROUPS.find(g => g.key === 'fruits')!; expect(fr.subjectTag).toBe('FRUIT ORDER'); expect(fr.skipGlobalCc).toBe(true); });
 });
