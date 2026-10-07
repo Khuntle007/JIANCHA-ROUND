@@ -1,0 +1,236 @@
+// JC-ROUND v2 — SQLite via Prisma. Enum-like columns are strings validated in src/lib.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/* ───────────── auth ───────────── */
+
+model Role {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique // MAIN_ADMIN | SCM_MANAGER | WH_ADMIN | PCM_ADMIN | OPERATION | custom-*
+  name        String
+  perms       String   @default("{}") // JSON { featureKey: true }
+  isProtected Boolean  @default(false) // MAIN_ADMIN: always all permissions, cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  invites     AuthToken[]
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique // stored lowercase
+  name            String
+  roleId          Int
+  role            Role      @relation(fields: [roleId], references: [id])
+  permOverrides   String    @default("{}") // JSON { featureKey: true|false } on top of the role
+  status          String    @default("active") // active | disabled
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  failedLogins    Int       @default(0)
+  lockedUntil     DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sessions        Session[]
+  tokens          AuthToken[] @relation("TokenUser")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique // sha256(cookie value)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// One-time tokens: kind = invite | reset
+model AuthToken {
+  id          String    @id @default(cuid())
+  kind        String
+  tokenHash   String    @unique // sha256(token) — raw token only ever exists in the emailed link
+  email       String
+  name        String?
+  roleId      Int?
+  role        Role?     @relation(fields: [roleId], references: [id])
+  userId      String?
+  user        User?     @relation("TokenUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdById String?
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([email, kind])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   String?
+  actorName String?
+  action    String
+  target    String?
+  meta      String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+/// Login / portal throttling that survives restarts
+model RateBucket {
+  key       String   @id
+  count     Int
+  resetAt   DateTime
+}
+
+/* ───────────── rounds domain ───────────── */
+
+model Branch {
+  code          String    @id // JC001…
+  nameEn        String
+  nameTh        String    @default("")
+  address       String    @default("")
+  phone         String    @default("")
+  am            String    @default("")
+  company       String    @default("บริษัท เจี้ยนชา จำกัด")
+  type          String    @default("") // MT | FC | ""
+  openDate      String    @default("") // ISO yyyy-mm-dd
+  mallCondition String    @default("")
+  mapUrl        String    @default("")
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  rounds        Round[]
+  orders        Order[]
+  shareLinks    ShareLink[]
+}
+
+model Round {
+  id         String @id @default(cuid())
+  branchCode String
+  branch     Branch @relation(fields: [branchCode], references: [code], onDelete: Cascade)
+  category   String // dry | fresh
+  warehouse  String @default("") // WH001 | WH002 | WH003 | ""
+  freshType  String @default("") // one of FRESH_TYPES | ""
+  product    String
+  slots      String @default("[]") // JSON [{order:0-6, cutoff:"HH:MM"|"" , deliver:0-6}] — day index 0 = Monday
+  sort       Int    @default(0)
+
+  @@index([branchCode])
+}
+
+model Order {
+  id           String   @id @default(cuid())
+  branchCode   String
+  branch       Branch   @relation(fields: [branchCode], references: [code], onDelete: Cascade)
+  orderDate    String // ISO yyyy-mm-dd (Bangkok)
+  docType      String // PO | TR
+  docNo        String   @default("")
+  category     String // dry | fresh
+  warehouse    String   @default("")
+  freshType    String   @default("")
+  product      String   @default("")
+  deliveryDate String   @default("")
+  status       String   @default("hold") // complete | cut | hold
+  note         String   @default("")
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([branchCode, orderDate])
+}
+
+model Holiday {
+  date      String   @id // ISO yyyy-mm-dd
+  name      String
+  createdAt DateTime @default(now())
+}
+
+/// Per-branch, per-line rescheduled delivery for a holiday
+model Special {
+  id         String @id @default(cuid())
+  date       String
+  branchCode String
+  line       String // WH001… or fresh type
+  newDate    String @default("")
+  note       String @default("")
+
+  @@unique([date, branchCode, line])
+}
+
+/// Read-only public branch view (/s/<token>) — replaces the old guessable ?branch=CODE link
+model ShareLink {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  branchCode  String
+  branch      Branch    @relation(fields: [branchCode], references: [code], onDelete: Cascade)
+  createdById String?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+/* ───────────── order drop ───────────── */
+
+/// Public franchise upload link (/d/<token>) — no login. branches = JSON [] (empty = all)
+model DropLink {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  name        String
+  branches    String    @default("[]")
+  active      Boolean   @default(true)
+  createdById String?
+  createdBy   String?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  drops       Drop[]
+}
+
+model Drop {
+  id           String    @id @default(cuid())
+  ref          String    @unique // OD-YYYYMMDD-NNNN
+  linkId       String?
+  link         DropLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  sourceName   String    @default("") // link / legacy account name at submit time
+  branchCode   String
+  branchName   String
+  issuerName   String
+  item         String // supplier group key (sp004…)
+  itemLegacy   String?
+  fileName     String
+  size         Int
+  sha256       String
+  emailStatus  String    @default("queued") // queued | sending | sent | dry-run | failed
+  emailTo      String    @default("[]")
+  emailCc      String    @default("[]")
+  emailAttempts Int      @default(0)
+  emailSentAt  DateTime?
+  emailError   String    @default("")
+  ip           String?
+  createdAt    DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+/// Email recipients per supplier group (catalog itself lives in code: src/lib/drop-catalog.ts)
+model ItemRoute {
+  key String @id
+  to  String @default("[]")
+  cc  String @default("[]")
+}
+
+model Counter {
+  key   String @id
+  value Int
+}

@@ -1,0 +1,60 @@
+import { describe, it, expect } from 'vitest';
+import { orderDayFor, deliverDayFor, sortRounds, lineMatch, lines, slotForOrderDay, cleanSlots, nextStatus, statusMeta } from '@/lib/domain';
+import { todayISO, addDays, monIndex, isISODate, dmyToISO, isoToDMY, sameMonth } from '@/lib/dates';
+import { effectivePerms, parsePerms, SYSTEM_ROLES } from '@/lib/perms';
+import { passwordProblem } from '@/lib/auth-rules';
+import { CATALOG, LEGACY_ITEM, emailOk } from '@/lib/drop-catalog';
+
+describe('weekend rules (ported from v1)', () => {
+  it('Sunday order moves to Friday', () => { expect(orderDayFor(0)).toBe(4); expect(orderDayFor(2)).toBe(1); });
+  it('Sat/Sun delivery moves to Monday', () => { expect(deliverDayFor(4)).toBe(0); expect(deliverDayFor(5)).toBe(0); expect(deliverDayFor(6)).toBe(0); expect(deliverDayFor(1)).toBe(2); });
+});
+
+describe('Bangkok dates (fixes v1 off-by-one)', () => {
+  it('today is the Bangkok date even before 07:00', () => { expect(todayISO(new Date('2026-10-06T18:30:00Z'))).toBe('2026-10-07'); });
+  it('addDays is pure calendar math', () => { expect(addDays('2026-10-07', -365)).toBe('2025-10-07'); expect(addDays('2026-02-28', 1)).toBe('2026-03-01'); });
+  it('monIndex: 0 = Monday', () => { expect(monIndex('2026-10-05')).toBe(0); expect(monIndex('2026-10-11')).toBe(6); });
+  it('validates dates', () => { expect(isISODate('2026-02-30')).toBe(false); expect(isISODate('2026-10-23')).toBe(true); });
+  it('dd/mm/yyyy round-trip', () => { expect(dmyToISO('7/10/2026')).toBe('2026-10-07'); expect(isoToDMY('2026-10-07')).toBe('07/10/2026'); expect(dmyToISO('31/02/2026')).toBe(''); });
+  it('sameMonth', () => { expect(sameMonth('2026-10-01', '2026-10-31')).toBe(true); });
+});
+
+describe('rounds', () => {
+  const rs = [
+    { category: 'fresh', warehouse: '', freshType: 'โยเกิร์ต', product: 'y', slots: [{ order: 0, cutoff: '12:00', deliver: 1 }] },
+    { category: 'dry', warehouse: 'WH003', freshType: '', product: 'f', slots: [] },
+    { category: 'fresh', warehouse: '', freshType: 'นมสด', product: 'm', slots: [{ order: 0, cutoff: '', deliver: 1 }, { order: 0, cutoff: '09:00', deliver: 2 }] },
+    { category: 'dry', warehouse: 'WH001', freshType: '', product: 'd', slots: [] },
+  ];
+  it('sorts dry (WH001, WH002, other) then fresh by type order', () => { expect(sortRounds(rs).map(r => r.product)).toEqual(['d', 'f', 'm', 'y']); });
+  it('line matching', () => { const milk = lines().find(l => l.key === 'นมสด')!; expect(rs.filter(r => lineMatch(r, milk)).map(r => r.product)).toEqual(['m']); });
+  it('first slot for an order day wins (v1 behaviour)', () => { expect(slotForOrderDay(rs[2], 0)?.deliver).toBe(1); });
+  it('cleanSlots drops invalid input', () => {
+    expect(cleanSlots([{ order: 7, deliver: 1 }, { order: 1, deliver: 2, cutoff: '25:00' }, { order: '2', deliver: '3', cutoff: '12:30' }]))
+      .toEqual([{ order: 1, deliver: 2, cutoff: '' }, { order: 2, deliver: 3, cutoff: '12:30' }]);
+  });
+  it('status cycle complete → cut → hold → complete', () => { expect(['complete', 'cut', 'hold'].map(nextStatus)).toEqual(['cut', 'hold', 'complete']); expect(statusMeta('weird').cls).toBe('hold'); });
+});
+
+describe('permissions', () => {
+  const role = (k: string) => { const r = SYSTEM_ROLES.find(x => x.key === k)!; return { perms: JSON.stringify(r.perms), isProtected: !!r.isProtected }; };
+  it('MAIN ADMIN always has everything, even with overrides', () => { expect(Object.values(effectivePerms(role('MAIN_ADMIN'), '{"manageUsers":false}')).every(Boolean)).toBe(true); });
+  it('Operation defaults', () => { const p = effectivePerms(role('OPERATION'), '{}'); expect(p.calendar && p.branches && p.orders && p.share).toBe(true); expect(p.editOrders || p.manageUsers || p.orderDrop).toBe(false); });
+  it('user overrides win over role', () => { const p = effectivePerms(role('OPERATION'), '{"orderDrop":true,"share":false}'); expect(p.orderDrop).toBe(true); expect(p.share).toBe(false); });
+  it('unknown keys are ignored', () => { expect(parsePerms('{"evil":true,"calendar":true}')).toEqual({ calendar: true }); });
+});
+
+describe('password rules', () => {
+  it('rejects short / no digits / containing email', () => {
+    expect(passwordProblem('Short1')).toBeTruthy();
+    expect(passwordProblem('onlyletterslong')).toBeTruthy();
+    expect(passwordProblem('chakrit2026xx', 'chakrit.ji@jianchatea.com')).toBeTruthy();
+    expect(passwordProblem('Teapot-Monsoon-42')).toBeNull();
+  });
+});
+
+describe('order drop catalog', () => {
+  it('5 supplier groups, cream cheese + whipping cream together', () => { expect(CATALOG.map(c => c.key)).toEqual(['sp004', 'sp036', 'sp162', 'sp011', 'sp163']); expect(CATALOG[1].ingredients.length).toBe(2); });
+  it('legacy keys map to groups', () => { expect(LEGACY_ITEM.cream_cheese).toBe('sp036'); expect(LEGACY_ITEM.whipping_cream).toBe('sp036'); });
+  it('email validation', () => { expect(emailOk('a@b.co')).toBe(true); expect(emailOk('a@b')).toBe(false); expect(emailOk('a b@c.d')).toBe(false); });
+});

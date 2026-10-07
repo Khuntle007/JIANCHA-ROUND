@@ -1,0 +1,32 @@
+{
+  "name": "jc-round-v2",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "dev": "next dev -p 3100",
+    "build": "prisma generate && next build",
+    "start": "next start -p ${PORT:-8094}",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "seed:admin": "tsx scripts/seed-admin.ts",
+    "import:legacy": "tsx scripts/import-legacy.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "bcryptjs": "^3.0.3",
+    "next": "^15.5.27",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

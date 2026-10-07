@@ -1,0 +1,20 @@
+[Unit]
+Description=JC-ROUND v2 (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/jc-round-web/app
+EnvironmentFile=/opt/jc-round-web/.env
+Environment=NODE_ENV=production
+ExecStart=/opt/jc-round-web/app/node_modules/.bin/next start -p 8094 -H 127.0.0.1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/jc-round-web/data /opt/jc-round-web/app/.next
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
