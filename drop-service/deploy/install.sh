@@ -10,6 +10,10 @@ VHOST=/etc/nginx/sites-available/jc-round.scm-backoffice.conf
 node -e 'process.exit(+process.versions.node.split(".")[0] >= 16 ? 0 : 1)' || { echo "Node >=16 required"; exit 1; }
 ss -ltn | grep -q ':8093 ' && ! systemctl is-active --quiet jc-round-drop && { echo "port 8093 busy — set another PORT"; exit 1; }
 
+# PO reader (pdftotext) — needed to read PO details from uploaded PDFs
+command -v pdftotext >/dev/null || { apt-get update -qq && apt-get install -y -qq poppler-utils; }
+command -v pdftotext >/dev/null || { echo "pdftotext missing — install poppler-utils"; exit 1; }
+
 install -d -m 755 "$DST"; install -d -m 700 -o www-data -g www-data "$DST/data"
 install -m 644 "$SRC/server.js" "$DST/server.js"
 [ -f "$DST/.env" ] || { install -m 600 "$SRC/deploy/env.example" "$DST/.env"; echo ">> fill GRAPH_* in $DST/.env (until then mail runs DRY-RUN)"; }
