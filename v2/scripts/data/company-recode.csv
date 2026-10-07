@@ -1,0 +1,14 @@
+from,to,type,note
+JC001,JC002,,Dragon town
+JC012,JC004,,Athenee Tower
+JC026,JC006,,Siam Discovery
+JC004,JC007,,Siam Paragon ชั้น5 (file uses JC007; ชั้นG keeps JC040)
+JC034,JC008,,Central Ladprao
+JC030,JC009,,Emsphere
+JC044,JC010,,Central World Groove
+JC060,JC011,,Shell รามอินทรา กม.4
+JC018,JC012,,Seacon Srinakarin
+JC009,JC013,,The Cove Hill
+JC054,JF053,FC,Little Walk Phrannok (franchise)
+JC011,WHB01,,คลังสินค้า บางพลี (warehouse; frees JC011)
+JC036,WHC01,,คลังสินค้า CIT cold chain (warehouse)

@@ -234,3 +234,13 @@ th[aria-sort]:hover{color:var(--jc-ink)}
 .rm-arrow{color:var(--jc-gold-dark)}
 .rm-rule span{overflow-wrap:anywhere}
 .rm-blocked{display:block;background:var(--badbg);color:var(--bad);padding:.5rem .6rem}
+
+.cell{cursor:pointer}
+.cell.sel{outline:2px solid var(--jc-ink);outline-offset:-2px}
+.cellcount{display:flex;flex-direction:column;gap:1px;margin-top:2px;font-size:.62rem;line-height:1.25}
+.cellchips{margin-top:2px;font-size:.58rem;line-height:1.3;color:var(--jc-stone)}
+.cc-o{color:var(--jc-ink);font-weight:600}
+.cc-r{color:var(--jc-gold-dark);font-weight:600}
+.cellchips .cc-o,.cellchips .cc-r{display:inline-block;min-width:1.6em}
+.dayplan details.linegroup summary{cursor:pointer;padding:.35rem 0}
+@media(max-width:640px){.cellcount{font-size:.55rem}.cellchips{display:none}}
