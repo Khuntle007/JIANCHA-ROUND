@@ -6,6 +6,7 @@ import { fmtDateTime } from '@/lib/dates';
 import { Report } from './Report';
 import { Products } from './Products';
 import { DropsList, type DropRow } from './DropsList';
+import { downloadPost } from '@/components/download';
 
 type Drop = DropRow & { notifiedAt: string | null; pendingCode: string; options: { id: string; name: string }[]; lines: { name: string; qty: number; unit: string }[] };
 type Link = { id: string; token: string; name: string; branchCode: string | null; active: boolean; createdBy: string | null; lastUsedAt: string | null };
@@ -24,7 +25,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
   const [editLink, setEditLink] = useState<Link | 'new' | null>(null);
   const [routing, setRouting] = useState(() => p.items.map(i => ({ key: i.key, to: i.to.join(', '), cc: i.cc.join(', '), blocked: i.blocked, subjectTag: i.subjectTag, skipGlobalCc: i.skipGlobalCc })));
   const [add, setAdd] = useState({ label: '', labelTh: '', to: '' });
-  const [lq, setLq] = useState('');
+  const [lq, setLq] = useState(''), [lsel, setLsel] = useState<Set<string>>(new Set());
   const { ask, node } = useConfirm();
   const linkUrl = (l: Link) => `${p.appUrl}/d/${l.token}`;
   const tabs: [Tab, string][] = [['drops', `ใบสั่งที่ได้รับ (${p.drops.length})`], ['pending', `รอเลือก supplier (${pending.length})`], ['report', 'รายงาน PO'], ['products', 'สินค้า & Supplier'], ['routing', 'ผู้รับตามประเภท'], ['links', `ลิงก์แฟรนไชส์ (${p.links.length})`]];
@@ -84,22 +85,42 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
 
       {tab === 'links' && <>
         <div className="card th small" style={{ marginBottom: '.8rem', background: 'var(--warnbg)' }}>แต่ละลิงก์ใช้<b>ส่งใบ PO ได้อย่างเดียว ไม่ต้องล็อกอิน และไม่เห็นข้อมูลใด ๆ</b> — ควรสร้าง 1 ลิงก์ต่อร้าน/แฟรนไชส์ (ชื่อลิงก์จะแสดงในรายงาน) · ถ้าลิงก์หลุดให้กด “เปลี่ยนลิงก์” หรือ “ปิด”</div>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: '.7rem' }}><input placeholder="ค้นหาสาขา / ชื่อ…" value={lq} onChange={e => setLq(e.target.value)} style={{ minWidth: 240 }} /><button className="btn gold" onClick={() => setEditLink('new')}>+ สร้างลิงก์แฟรนไชส์</button></div>
-        <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
-          <thead><tr><th>ชื่อ</th><th>ลิงก์</th><th>ใช้ล่าสุด</th><th /></tr></thead>
-          <tbody>{p.links.length ? p.links.filter(l => !lq || l.name.toLowerCase().includes(lq.toLowerCase())).map(l => (
-            <tr key={l.id} style={l.active ? undefined : { opacity: .5 }}>
-              <td className="th"><b>{l.name}</b><div className="small muted">{l.branchCode ? `สาขา ${l.branchCode} · ` : ''}{l.active ? 'ใช้งาน' : 'ปิดอยู่'} · สร้างโดย {l.createdBy || '—'}</div></td>
-              <td className="small" style={{ maxWidth: 280, wordBreak: 'break-all' }}><code>{linkUrl(l)}</code></td>
-              <td className="small">{l.lastUsedAt ? fmtDateTime(l.lastUsedAt) : '—'}</td>
-              <td><div className="rowx">
-                <button className="btn sm" onClick={() => copyText(linkUrl(l))}>คัดลอก</button>
-                <button className="btn sm ghost" onClick={() => setEditLink(l)}>แก้</button>
-                <button className="btn sm ghost" onClick={() => ask(`เปลี่ยนลิงก์ของ ${l.name}? ลิงก์เดิมจะใช้ไม่ได้ทันที`, async () => { await api(`/api/drop-links/${l.id}`, { method: 'PATCH', body: { rotate: true } }); toast('เปลี่ยนลิงก์แล้ว'); router.refresh(); })}>เปลี่ยนลิงก์</button>
-                <button className="btn sm ghost" onClick={() => ask(`ลบลิงก์ ${l.name}? (ใบสั่งเดิมยังเก็บไว้)`, async () => { await api(`/api/drop-links/${l.id}`, { method: 'DELETE' }); router.refresh(); }, { danger: true, yes: 'ลบ' })}>ลบ</button>
-              </div></td>
-            </tr>
-          )) : <tr><td colSpan={4}><div className="empty th">ยังไม่มีลิงก์ — กด “สร้างลิงก์แฟรนไชส์”</div></td></tr>}</tbody></table></div></div>
+        {(() => {
+          const shown = p.links.filter(l => !lq || l.name.toLowerCase().includes(lq.toLowerCase()));
+          const target = lsel.size ? shown.filter(l => lsel.has(l.id)) : shown; // nothing ticked = all shown
+          const allOn = shown.length > 0 && shown.every(l => lsel.has(l.id));
+          const copyAll = () => copyText(['รหัสสาขา\tชื่อ\tลิงก์ส่งใบ PO', ...target.map(l => `${l.branchCode || ''}\t${l.name}\t${linkUrl(l)}`)].join('\n'));
+          return <>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: '.7rem' }}>
+              <input placeholder="ค้นหาสาขา / ชื่อ…" value={lq} onChange={e => setLq(e.target.value)} style={{ minWidth: 240 }} />
+              <div className="row">
+                <span className="small muted th">{lsel.size ? <>เลือก <b>{lsel.size}</b> · <a href="#" onClick={e => { e.preventDefault(); setLsel(new Set()); }}>ล้าง</a></> : `ทั้งหมดที่แสดง (${shown.length})`}:</span>
+                <button className="btn sm" disabled={!target.length} onClick={copyAll} title="คัดลอกเป็นตาราง (วางใน Excel / LINE / อีเมลได้)">คัดลอก {target.length} ลิงก์</button>
+                <button className="btn sm" disabled={!target.length} onClick={() => downloadPost('/api/drop-links/export', { ids: target.map(l => l.id) }, 'franchise-links.xlsx')}>Excel</button>
+                <button className="btn gold" onClick={() => setEditLink('new')}>+ สร้างลิงก์แฟรนไชส์</button>
+              </div>
+            </div>
+            <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
+              <thead><tr>
+                <th style={{ width: 28 }}><input type="checkbox" aria-label="เลือกทั้งหมดที่แสดง" checked={allOn} onChange={e => setLsel(e.target.checked ? new Set([...lsel, ...shown.map(l => l.id)]) : new Set([...lsel].filter(id => !shown.some(l => l.id === id))))} /></th>
+                <th>ชื่อ</th><th>ลิงก์</th><th>ใช้ล่าสุด</th><th />
+              </tr></thead>
+              <tbody>{shown.length ? shown.map(l => (
+                <tr key={l.id} style={{ ...(l.active ? {} : { opacity: .5 }), ...(lsel.has(l.id) ? { background: '#F5F4F2' } : {}) }}>
+                  <td><input type="checkbox" aria-label={'เลือก ' + l.name} checked={lsel.has(l.id)} onChange={e => setLsel(x => { const n = new Set(x); if (e.target.checked) n.add(l.id); else n.delete(l.id); return n; })} /></td>
+                  <td className="th"><b>{l.name}</b><div className="small muted">{l.branchCode ? `สาขา ${l.branchCode} · ` : ''}{l.active ? 'ใช้งาน' : 'ปิดอยู่'} · สร้างโดย {l.createdBy || '—'}</div></td>
+                  <td className="small" style={{ maxWidth: 280, wordBreak: 'break-all' }}><code>{linkUrl(l)}</code></td>
+                  <td className="small">{l.lastUsedAt ? fmtDateTime(l.lastUsedAt) : '—'}</td>
+                  <td><div className="rowx">
+                    <button className="btn sm" onClick={() => copyText(linkUrl(l))}>คัดลอก</button>
+                    <button className="btn sm ghost" onClick={() => setEditLink(l)}>แก้</button>
+                    <button className="btn sm ghost" onClick={() => ask(`เปลี่ยนลิงก์ของ ${l.name}? ลิงก์เดิมจะใช้ไม่ได้ทันที`, async () => { await api(`/api/drop-links/${l.id}`, { method: 'PATCH', body: { rotate: true } }); toast('เปลี่ยนลิงก์แล้ว'); router.refresh(); })}>เปลี่ยนลิงก์</button>
+                    <button className="btn sm ghost" onClick={() => ask(`ลบลิงก์ ${l.name}? (ใบสั่งเดิมยังเก็บไว้)`, async () => { await api(`/api/drop-links/${l.id}`, { method: 'DELETE' }); router.refresh(); }, { danger: true, yes: 'ลบ' })}>ลบ</button>
+                  </div></td>
+                </tr>
+              )) : <tr><td colSpan={5}><div className="empty th">ไม่พบลิงก์</div></td></tr>}</tbody></table></div></div>
+          </>;
+        })()}
       </>}
 
       {editLink && <LinkModal link={editLink === 'new' ? null : editLink} appUrl={p.appUrl} onClose={() => setEditLink(null)} onSaved={url => { setEditLink(null); router.refresh(); if (url) copyText(url); }} />}
