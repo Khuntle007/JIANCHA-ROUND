@@ -47,7 +47,7 @@ async function nextSeq(): Promise<number> {
 }
 
 /** Split a PO into routing groups and store one drop per group (same PDF for each). */
-export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileName: string; link: { id: string; name: string }; ip: string }) {
+export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileName: string; link: { id: string; name: string; branchCode?: string | null }; ip: string }) {
   const { po, buf } = opts;
   const items = await itemTypes();
   type G = { route: Route | null; item: string; lines: PoLine[] };
@@ -76,7 +76,7 @@ export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileNam
     const gpo: PoData = { ...po, lines: g.lines, partial, ...(partial ? { total: Math.round(g.lines.reduce((x, l) => x + l.total, 0) * 100) / 100 } : {}) };
     const pending = g.route?.kind === 'pending';
     const d = await prisma.drop.create({ data: {
-      ref: `OD-${ymd}-${String(await nextSeq()).padStart(4, '0')}`, linkId: opts.link.id, sourceName: opts.link.name,
+      ref: `OD-${ymd}-${String(await nextSeq()).padStart(4, '0')}`, linkId: opts.link.id, sourceName: opts.link.name, branchCode: opts.link.branchCode || '',
       branchName: po.buyer || '-', issuerName: po.issuedBy || opts.link.name, item: g.item, fileName: opts.fileName, size: buf.length, sha256: hash,
       po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: pending ? 'pending' : 'queued', ip: opts.ip,
     } });

@@ -13,7 +13,7 @@ export default async function DropsPage({ searchParams }: { searchParams: Promis
   const u = await requirePage('orderDrop', '/drops');
   const [drops, links, items, settings, bc] = await Promise.all([
     prisma.drop.findMany({ orderBy: { createdAt: 'desc' }, take: 1000 }),
-    prisma.dropLink.findMany({ orderBy: { createdAt: 'asc' } }),
+    prisma.dropLink.findMany({ orderBy: [{ branchCode: 'asc' }, { createdAt: 'asc' }] }),
     itemTypes(), dropSettings(), bcStatus(),
   ]);
   return (
@@ -28,7 +28,7 @@ export default async function DropsPage({ searchParams }: { searchParams: Promis
             pendingCode: r?.kind === 'pending' ? r.code : '', options: r?.kind === 'pending' ? r.options.map(o => ({ id: o.id, name: o.name })) : [],
             lines: po?.lines.map(l => ({ name: l.name, qty: l.qty, unit: l.unit })) || [] };
         })}
-        links={links.map(l => ({ id: l.id, token: l.token, name: l.name, active: l.active, createdBy: l.createdBy, lastUsedAt: l.lastUsedAt?.toISOString() || null }))} />
+        links={links.map(l => ({ id: l.id, token: l.token, name: l.name, branchCode: l.branchCode, active: l.active, createdBy: l.createdBy, lastUsedAt: l.lastUsedAt?.toISOString() || null }))} />
     </Shell>
   );
 }

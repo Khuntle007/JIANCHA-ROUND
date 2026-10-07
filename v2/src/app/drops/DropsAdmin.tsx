@@ -8,7 +8,7 @@ import { Products } from './Products';
 
 type Drop = { id: string; ref: string; poNumber: string; branchName: string; issuerName: string; item: string; fileName: string; size: number; sourceName: string; createdAt: string;
   emailStatus: string; emailError: string; emailTo: string; notifiedAt: string | null; supplierName: string; chosenBy: string; pendingCode: string; options: { id: string; name: string }[]; lines: { name: string; qty: number; unit: string }[] };
-type Link = { id: string; token: string; name: string; active: boolean; createdBy: string | null; lastUsedAt: string | null };
+type Link = { id: string; token: string; name: string; branchCode: string | null; active: boolean; createdBy: string | null; lastUsedAt: string | null };
 type Item = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[] };
 type Bc = { configured: boolean; lastSyncAt?: string; count?: number; company?: string; error?: string; failedAt?: string };
 const fmtSize = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
@@ -33,6 +33,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
   const [editLink, setEditLink] = useState<Link | 'new' | null>(null);
   const [routing, setRouting] = useState(() => p.items.map(i => ({ key: i.key, to: i.to.join(', '), cc: i.cc.join(', ') })));
   const [add, setAdd] = useState({ label: '', labelTh: '', to: '' });
+  const [lq, setLq] = useState('');
   const { ask, node } = useConfirm();
   const itemLabel = (k: string) => p.items.find(i => i.key === k)?.label || k;
   const linkUrl = (l: Link) => `${p.appUrl}/d/${l.token}`;
@@ -114,12 +115,12 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
 
       {tab === 'links' && <>
         <div className="card th small" style={{ marginBottom: '.8rem', background: 'var(--warnbg)' }}>แต่ละลิงก์ใช้<b>ส่งใบ PO ได้อย่างเดียว ไม่ต้องล็อกอิน และไม่เห็นข้อมูลใด ๆ</b> — ควรสร้าง 1 ลิงก์ต่อร้าน/แฟรนไชส์ (ชื่อลิงก์จะแสดงในรายงาน) · ถ้าลิงก์หลุดให้กด “เปลี่ยนลิงก์” หรือ “ปิด”</div>
-        <div className="row" style={{ justifyContent: 'flex-end', marginBottom: '.7rem' }}><button className="btn gold" onClick={() => setEditLink('new')}>+ สร้างลิงก์แฟรนไชส์</button></div>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: '.7rem' }}><input placeholder="ค้นหาสาขา / ชื่อ…" value={lq} onChange={e => setLq(e.target.value)} style={{ minWidth: 240 }} /><button className="btn gold" onClick={() => setEditLink('new')}>+ สร้างลิงก์แฟรนไชส์</button></div>
         <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
           <thead><tr><th>ชื่อ</th><th>ลิงก์</th><th>ใช้ล่าสุด</th><th /></tr></thead>
-          <tbody>{p.links.length ? p.links.map(l => (
+          <tbody>{p.links.length ? p.links.filter(l => !lq || l.name.toLowerCase().includes(lq.toLowerCase())).map(l => (
             <tr key={l.id} style={l.active ? undefined : { opacity: .5 }}>
-              <td className="th"><b>{l.name}</b><div className="small muted">{l.active ? 'ใช้งาน' : 'ปิดอยู่'} · สร้างโดย {l.createdBy || '—'}</div></td>
+              <td className="th"><b>{l.name}</b><div className="small muted">{l.branchCode ? `สาขา ${l.branchCode} · ` : ''}{l.active ? 'ใช้งาน' : 'ปิดอยู่'} · สร้างโดย {l.createdBy || '—'}</div></td>
               <td className="small" style={{ maxWidth: 280, wordBreak: 'break-all' }}><code>{linkUrl(l)}</code></td>
               <td className="small">{l.lastUsedAt ? fmtDateTime(l.lastUsedAt) : '—'}</td>
               <td><div className="rowx">

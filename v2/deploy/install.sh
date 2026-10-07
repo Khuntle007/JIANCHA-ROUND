@@ -34,7 +34,8 @@ fi
 cd "$APP"
 npm ci --no-audit --no-fund --loglevel=error
 set -a; . "$ENVF"; set +a
-npx prisma db push --skip-generate >/dev/null
+# schema changes that prisma flags as possible data loss stop the install; review, then re-run with ALLOW_DATA_LOSS=1
+npx prisma db push --skip-generate ${ALLOW_DATA_LOSS:+--accept-data-loss}
 npm run build
 chmod -R go+rX "$APP"            # code is not secret; secrets live only in $ENVF (600)
 chown -R www-data:www-data $APP/.next $ROOT/data

@@ -188,6 +188,7 @@ model DropLink {
   id          String    @id @default(cuid())
   token       String    @unique
   name        String
+  branchCode  String?   @unique // franchise store this link belongs to (one link per store)
   active      Boolean   @default(true)
   createdById String?
   createdBy   String?
