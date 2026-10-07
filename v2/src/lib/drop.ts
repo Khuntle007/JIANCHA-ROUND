@@ -3,7 +3,7 @@ import path from 'path';
 import { prisma } from './db';
 import { env } from './env';
 import { hmac, safeEqual, sha256 } from './crypto';
-import { sendMail, escHtml } from './mail';
+import { sendMail, escHtml, brandHead } from './mail';
 import { OTHER_KEY, ITEM_GROUPS, OTHER_GROUP, normName, emailOk } from './drop-catalog';
 import { todayISO } from './dates';
 import { codeOf, stripCode, type PoData, type PoLine } from './po';
@@ -96,7 +96,7 @@ export function verifyFileSig(id: string, exp: number, sig: string) {
 
 const money = (n: number | null | undefined) => (n == null ? '' : Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const shell = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;max-width:680px">
-  <div style="background:#181818;color:#fff;padding:16px 20px;letter-spacing:.2em;font-weight:700">JIAN CHA <span style="color:#AD9C82;font-size:11px;letter-spacing:.25em;font-weight:400">· ORDER DROP</span></div>
+  <div style="background:#181818;color:#fff;padding:16px 20px;border-bottom:2px solid #AD9C82">${brandHead('ORDER DROP')}</div>
   <div style="border:1px solid #EBE9E6;border-top:3px solid #AD9C82;padding:18px 20px">${inner}</div>
   <p style="font-size:11px;color:#525252;margin:10px 2px">อีเมลอัตโนมัติจากระบบ JC-ROUND — กรุณาอย่าตอบกลับ / Automated message, please do not reply.</p></div>`;
 

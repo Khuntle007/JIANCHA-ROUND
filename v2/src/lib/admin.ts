@@ -31,7 +31,7 @@ export async function sendInvite(opts: { email: string; name: string; roleId: nu
   const r = await sendMail({
     to: [opts.email], subject: 'JC-ROUND · คำเชิญเข้าใช้งาน / You are invited',
     html: layout('INVITATION', `<p>สวัสดี ${escHtml(opts.name || opts.email)},</p>
-      <p>${escHtml(opts.actor?.name || 'ผู้ดูแลระบบ')} เชิญคุณเข้าใช้ระบบรอบสั่ง–รอบส่ง JIANCHA (JC-ROUND) ในบทบาท <b>${escHtml(role.name)}</b></p>
+      <p>${escHtml(opts.actor?.name || 'ผู้ดูแลระบบ')} เชิญคุณเข้าใช้ระบบรอบสั่ง–รอบส่ง JIAN CHA (JC-ROUND) ในบทบาท <b>${escHtml(role.name)}</b></p>
       <p>กดปุ่มด้านล่างเพื่อตั้งรหัสผ่าน (ลิงก์ใช้ได้ 7 วัน)</p>${button(link, 'ตั้งรหัสผ่าน & เข้าใช้งาน')}`),
   });
   return { id: inv.id, link, dryRun: r.dryRun };

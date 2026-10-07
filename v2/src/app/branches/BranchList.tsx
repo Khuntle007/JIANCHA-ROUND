@@ -29,7 +29,7 @@ export function BranchList({ branches, canEditBranch, canEditRounds }: { branche
               <td className="hide-sm">{b.type && <span className={'tag ' + (b.type === 'MT' ? 'mt' : 'fc')}>{b.type}</span>}</td>
               <td className="hide-sm small th">{b.am}</td>
               <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                {canEditRounds && <button className="btn sm ghost" title="ตั้งค่ารอบ" onClick={() => setEditRounds(b)}>⚙</button>}{' '}
+                {canEditRounds && <button className="btn sm ghost" title="ตั้งค่ารอบ" onClick={() => setEditRounds(b)}>ตั้งค่ารอบ</button>}{' '}
                 <button className="btn sm ghost" aria-expanded={open === b.code} onClick={() => setOpen(open === b.code ? null : b.code)}>{open === b.code ? '▴' : '▾'}</button>
               </td>
             </tr>

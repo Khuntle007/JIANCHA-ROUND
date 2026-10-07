@@ -56,7 +56,7 @@ export function CalendarClient(p: { today: string; canManage: boolean; canBranch
   }, [p.branches, boardLine, boardDay]);
 
   return (
-    <div className="grid2" style={{ gridTemplateColumns: 'minmax(0,1.25fr) minmax(0,1fr)', gap: '1rem', alignItems: 'start' }}>
+    <div className="callayout">
       <div>
         <div className="pagehead"><div><div className="kicker">ปฏิทินการดำเนินงาน</div><h1 className="th">วันหยุด &amp; รอบจัดส่งเฉพาะกิจ</h1></div>
           <div className="row"><button className="btn sm ghost" onClick={() => shift(-1)}>‹ เดือนก่อน</button><span className="pill2 th">{monthLabel}</span><button className="btn sm ghost" onClick={() => shift(1)}>เดือนถัดไป ›</button></div></div>

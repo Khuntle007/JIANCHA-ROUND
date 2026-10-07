@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { api, Modal } from '@/components/client';
-import { Emblem } from '@/components/Emblem';
+import { BrandBar } from '@/components/Emblem';
 
 const fmtSize = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 type Done = { poNumber: string; buyer: string; drops: { ref: string; item: string }[] };
@@ -20,9 +20,9 @@ export function Portal({ token }: { token: string }) {
   };
   return (
     <>
-      <div className="topbar"><div className="brand"><Emblem /><div className="wm">JIANCHA<small>ORDER DROP · FRANCHISE</small></div></div><div className="spacer" />{info && <div className="who"><span className="th">{info.name}</span></div>}</div>
+      <div className="topbar"><div className="brand"><BrandBar sub="Order Drop · Franchise" /></div><div className="spacer" />{info && <div className="who"><span className="th">{info.name}</span></div>}</div>
       <div className="wrap" style={{ maxWidth: 680 }}>
-        {fatal ? <div className="card"><div className="empty th">{fatal}<div className="small muted" style={{ marginTop: '.4rem' }}>ติดต่อทีม SCM JIANCHA เพื่อขอลิงก์ใหม่</div></div></div> : !info ? <div className="card"><div className="empty th">กำลังโหลด…</div></div> : <>
+        {fatal ? <div className="card"><div className="empty th">{fatal}<div className="small muted" style={{ marginTop: '.4rem' }}>ติดต่อทีม SCM JIAN CHA เพื่อขอลิงก์ใหม่</div></div></div> : !info ? <div className="card"><div className="empty th">กำลังโหลด…</div></div> : <>
           <div className="pagehead"><div><div className="kicker">Order Drop</div><h1 className="th">ส่งใบสั่งซื้อ (PO)</h1></div></div>
           <form className="card" onSubmit={async e => {
             e.preventDefault(); if (busy) return;
@@ -37,17 +37,17 @@ export function Portal({ token }: { token: string }) {
               onClick={() => input.current?.click()} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') input.current?.click(); }}
               onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={e => { e.preventDefault(); setOver(false); pick(e.dataTransfer.files[0]); }}>
               <input ref={input} type="file" accept="application/pdf,.pdf" hidden onChange={e => pick(e.target.files?.[0])} />
-              {file ? <div className="th">📄 <b>{file.name}</b> <span className="muted small">{fmtSize(file.size)}</span><div className="small muted">คลิกเพื่อเปลี่ยนไฟล์</div></div>
+              {file ? <div className="th"><b>{file.name}</b> <span className="muted small">{fmtSize(file.size)}</span><div className="small muted">คลิกเพื่อเปลี่ยนไฟล์</div></div>
                 : <div className="th">ลากไฟล์ PDF มาวาง หรือ <u>คลิกเพื่อเลือกไฟล์</u><div className="small muted">สูงสุด {fmtSize(info.maxBytes)}</div></div>}
             </div>
             <div className="err th" role="alert" style={{ marginTop: '.4rem' }}>{msg}</div>
             <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn gold" disabled={busy}>{busy ? 'กำลังส่ง…' : 'ส่งใบสั่ง'}</button></div>
           </form>
         </>}
-        <div className="foot">JIANCHA · External Order Drop — ระบบรับใบสั่งซื้อจากแฟรนไชส์</div>
+        <div className="foot">JIAN CHA · Order Drop</div>
       </div>
       {done && <Modal title="ส่งใบสั่งเรียบร้อย" onClose={() => setDone(null)} width={440}>
-        <p className="th" style={{ margin: '.2rem 0 .6rem', textAlign: 'center' }}>✓ <b>{done.poNumber}</b><br /><span className="small muted">{done.buyer}</span></p>
+        <p className="th" style={{ margin: '.2rem 0 .6rem', textAlign: 'center' }}><b>{done.poNumber}</b><br /><span className="small muted">{done.buyer}</span></p>
         <div className="small th" style={{ marginBottom: '1rem' }}>{done.drops.map(d => <div key={d.ref}>• {d.ref} · {d.item}</div>)}</div>
         <div className="row" style={{ justifyContent: 'center' }}><button className="btn gold" onClick={() => setDone(null)}>ตกลง</button></div>
       </Modal>}

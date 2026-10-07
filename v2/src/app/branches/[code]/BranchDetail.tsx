@@ -33,8 +33,8 @@ export function BranchDetail({ branch: b, orders, today, perms }: { branch: Bran
       <div className="pagehead">
         <div><div className="kicker">{b.code}{!b.active && ' · ปิดใช้งาน'}</div><h1 className="th">{b.nameEn}</h1>{b.nameTh && <div className="muted th">{b.nameTh}</div>}</div>
         <div className="row">
-          {perms.share && <button className="btn ghost" onClick={async () => { try { setShare((await api<{ url: string }>(`/api/branches/${b.code}/share`, { method: 'POST' })).url); setModal('share'); } catch (e) { toast((e as Error).message); } }}>🔗 แชร์ลิงก์สาขา</button>}
-          {perms.history && perms.orders && <button className="btn ghost" onClick={() => setModal('history')}>🕑 ประวัติ 1 ปี</button>}
+          {perms.share && <button className="btn ghost" onClick={async () => { try { setShare((await api<{ url: string }>(`/api/branches/${b.code}/share`, { method: 'POST' })).url); setModal('share'); } catch (e) { toast((e as Error).message); } }}>แชร์ลิงก์สาขา</button>}
+          {perms.history && perms.orders && <button className="btn ghost" onClick={() => setModal('history')}>ประวัติ 1 ปี</button>}
           {perms.editBranch && <button className="btn" onClick={() => setModal('branch')}>แก้ไขข้อมูลสาขา</button>}
         </div>
       </div>
@@ -45,7 +45,7 @@ export function BranchDetail({ branch: b, orders, today, perms }: { branch: Bran
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: '.6rem' }}><div className="kicker">รอบสั่ง–รับของ</div>
-          {perms.editRounds && <div className="row"><button className="btn sm ghost" onClick={() => setModal('roundsNew')}>+ เพิ่มสินค้า/คลัง</button><button className="btn sm" onClick={() => setModal('rounds')}>⚙ ตั้งค่ารอบ</button></div>}</div>
+          {perms.editRounds && <div className="row"><button className="btn sm ghost" onClick={() => setModal('roundsNew')}>+ เพิ่มสินค้า/คลัง</button><button className="btn sm" onClick={() => setModal('rounds')}>ตั้งค่ารอบ</button></div>}</div>
         <RoundsTable rounds={b.rounds} />
       </div>
 

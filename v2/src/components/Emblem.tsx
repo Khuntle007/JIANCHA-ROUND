@@ -1,12 +1,16 @@
-export function Emblem({ size = 34 }: { size?: number }) {
+/* Official JIAN CHA artwork (public/brand) — never redraw the mark. */
+/** Horizontal lockup (brandmark + JIAN CHA wordmark) for dark bars, with an optional product sub-label. */
+export function BrandBar({ sub }: { sub: string }) {
   return (
-    <svg className="emblem" width={size} height={size} viewBox="0 0 200 200" aria-label="JIANCHA" style={{ color: 'var(--jc-gold)' }}>
-      <g fill="none" stroke="currentColor" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="100" cy="100" r="82" />
-        <path d="M52 122 L86 74 L108 104 L124 86 L150 122" />
-        <path d="M50 134 q14 -8 26 0 t26 0 t26 0 t22 0" />
-        <path d="M56 148 q14 -8 26 0 t26 0 t26 0" />
-      </g>
-    </svg>
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/brand/jiancha-logo-white.png" alt="JIAN CHA" className="logo" width={1200} height={241} />
+      <span className="sub">{sub}</span>
+    </>
   );
+}
+/** Primary (stacked) logo for dark grounds. */
+export function BrandStack({ width = 150 }: { width?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/brand/jiancha-stack-white.png" alt="JIAN CHA" className="stack" width={width} height={Math.round(width * 554 / 640)} />;
 }

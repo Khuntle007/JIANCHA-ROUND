@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { CurrentUser } from '@/lib/auth';
-import { Emblem } from './Emblem';
+import { BrandBar } from './Emblem';
 import { LogoutButton } from './LogoutButton';
 
 const NAV: { href: string; label: string; perm: keyof CurrentUser['perms'] }[] = [
@@ -14,7 +14,7 @@ export function Shell({ user, active, children }: { user: CurrentUser; active: s
   return (
     <>
       <div className="topbar">
-        <Link href="/" className="brand" style={{ textDecoration: 'none' }}><Emblem /><div className="wm">JIANCHA<small>ROUNDS SYSTEM</small></div></Link>
+        <Link href="/" className="brand" aria-label="JIAN CHA Rounds System — หน้าแรก"><BrandBar sub="Rounds System" /></Link>
         <nav className="nav">
           {NAV.filter(n => user.perms[n.perm]).map(n => <Link key={n.href} href={n.href} className={active === n.href ? 'active' : ''}>{n.label}</Link>)}
         </nav>
@@ -26,7 +26,7 @@ export function Shell({ user, active, children }: { user: CurrentUser; active: s
       </div>
       <div className="wrap">
         <main id="main">{children}</main>
-        <div className="foot">JIANCHA · ระบบรอบสั่ง–รอบส่ง v2</div>
+        <div className="foot">JIAN CHA · Rounds System</div>
       </div>
     </>
   );

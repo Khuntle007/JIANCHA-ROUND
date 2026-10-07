@@ -46,10 +46,14 @@ export async function sendMail(m: Mail): Promise<{ dryRun: boolean }> {
 
 export const escHtml = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-/** JIANCHA-branded shell (black header, tan rule). */
+/** Official white lockup (hosted by the app) + product label; alt text keeps the brand when images are blocked. */
+export const brandHead = (label: string) =>
+  `<img src="${env.appUrl}/brand/jiancha-logo-white.png" alt="JIAN CHA" height="20" style="height:20px;width:auto;vertical-align:middle;border:0"> <span style="color:#AD9C82;font-size:10px;letter-spacing:.24em;font-weight:600;vertical-align:middle;padding-left:12px">${escHtml(label)}</span>`;
+
+/** JIAN CHA-branded shell (black header, tan rule). */
 export function layout(title: string, inner: string) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;color:#181818">
-  <div style="background:#181818;color:#fff;padding:16px 20px;letter-spacing:.2em;font-weight:700">JIAN CHA <span style="color:#AD9C82;font-size:11px;letter-spacing:.25em;font-weight:400">· ${escHtml(title)}</span></div>
+  <div style="background:#181818;color:#fff;padding:16px 20px;border-bottom:2px solid #AD9C82">${brandHead(title)}</div>
   <div style="border:1px solid #EBE9E6;border-top:3px solid #AD9C82;padding:18px 20px;font-size:14px;line-height:1.6">${inner}</div>
   <p style="font-size:11px;color:#525252;margin:10px 2px">อีเมลอัตโนมัติจากระบบ JC-ROUND — กรุณาอย่าตอบกลับ / Automated message, please do not reply.</p></div>`;
 }
