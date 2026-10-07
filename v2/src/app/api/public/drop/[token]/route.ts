@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { hit } from '@/lib/ratelimit';
 import { pdfText, parsePo, PoError } from '@/lib/po';
 import { createDropsFromPo, deliverDrop, notifyScm, itemTypes } from '@/lib/drop';
+import { BLOCKED_MESSAGE } from '@/lib/drop-catalog';
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -38,8 +39,15 @@ export const POST = route(async (req: Request, { params }: Ctx) => {
   if (!po.number || !po.lines.length) throw new ApiError(422, 'ไม่พบข้อมูล PO ในไฟล์นี้ — ต้องเป็นใบ PO (PURCHASE ORDER) จากระบบ PO เท่านั้น');
   const drops = await createDropsFromPo({ po, buf, fileName, link: l, ip });
   await prisma.dropLink.update({ where: { id: l.id }, data: { lastUsedAt: new Date() } });
-  drops.filter(d => !d.pending).forEach(d => void deliverDrop(d.id)); // async — the franchise gets the refs immediately
+  drops.filter(d => !d.pending && !d.blocked).forEach(d => void deliverDrop(d.id)); // async — the franchise gets the refs immediately
   void notifyScm(drops.filter(d => d.pending).map(d => d.id));
   const items = await itemTypes();
-  return json({ ok: true, poNumber: po.number, buyer: po.buyer, drops: drops.map(d => ({ ref: d.ref, item: items.find(i => i.key === d.item)?.label || d.item })) }, 201);
+  const label = (k: string) => items.find(i => i.key === k)?.label || k;
+  const accepted = drops.filter(d => !d.blocked), rejected = drops.filter(d => d.blocked);
+  // blocked items are kept on record only; the franchise is told to contact the Area Manager
+  return json({
+    ok: accepted.length > 0, poNumber: po.number, buyer: po.buyer, ...(accepted.length ? {} : { error: BLOCKED_MESSAGE }),
+    drops: accepted.map(d => ({ ref: d.ref, item: label(d.item) })),
+    blocked: rejected.length ? { message: BLOCKED_MESSAGE, items: rejected.map(d => label(d.item)) } : undefined,
+  }, accepted.length ? 201 : 422);
 });

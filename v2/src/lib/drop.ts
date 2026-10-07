@@ -16,7 +16,7 @@ const J = <T>(s: string | null | undefined, d: T): T => { try { return s ? (JSON
 export type Route =
   | { kind: 'supplier'; supplierId: string; supplierName: string; to: string[]; cc: string[]; chosenBy?: string; chosenAt?: string }
   | { kind: 'pending'; code: string; options: { id: string; name: string; to: string[]; cc: string[] }[] };
-export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; words: string[]; sort: number };
+export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; words: string[]; blocked: boolean; sort: number };
 
 export const filesDir = () => { const d = path.join(env.dataDir, 'files'); fs.mkdirSync(d, { recursive: true }); return d; };
 export const dropFile = (id: string) => path.join(filesDir(), `${id}.pdf`);
@@ -26,7 +26,7 @@ export const parsePoJson = (s: string | null) => J<PoData | null>(s, null);
 /** Item groups, seeding the defaults on first use. 'other' always exists and is last. */
 export async function itemTypes(): Promise<ItemTypeRow[]> {
   if (!(await prisma.itemType.count()))
-    await prisma.itemType.createMany({ data: [...ITEM_GROUPS, OTHER_GROUP].map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', codes: JSON.stringify(i.codes), words: JSON.stringify(i.words), sort: i.key === OTHER_KEY ? 9999 : n })) });
+    await prisma.itemType.createMany({ data: [...ITEM_GROUPS, OTHER_GROUP].map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', codes: JSON.stringify(i.codes), words: JSON.stringify(i.words), blocked: !!i.blocked, sort: i.key === OTHER_KEY ? 9999 : n })) });
   if (!(await prisma.itemType.findUnique({ where: { key: OTHER_KEY } })))
     await prisma.itemType.create({ data: { key: OTHER_KEY, label: OTHER_GROUP.label, labelTh: OTHER_GROUP.labelTh, sort: 9999 } });
   return (await prisma.itemType.findMany({ orderBy: { sort: 'asc' } })).map(i => ({ ...i, to: J<string[]>(i.to, []), cc: J<string[]>(i.cc, []), codes: J<string[]>(i.codes, []), words: J<string[]>(i.words, []) }));
@@ -50,10 +50,18 @@ async function nextSeq(): Promise<number> {
 export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileName: string; link: { id: string; name: string; branchCode?: string | null }; ip: string }) {
   const { po, buf } = opts;
   const items = await itemTypes();
-  type G = { route: Route | null; item: string; lines: PoLine[] };
+  type G = { route: Route | null; item: string; lines: PoLine[]; blocked?: boolean };
   const groups = new Map<string, G>();
   for (const l of po.lines) {
     const code = codeOf(l.name);
+    const lineItem = itemForLine(l.name, items);
+    if (items.find(i => i.key === lineItem)?.blocked) { // recorded only — never forwarded, whatever suppliers are linked
+      const k = 'blocked:' + lineItem;
+      if (!groups.has(k)) groups.set(k, { route: null, item: lineItem, lines: [], blocked: true });
+      groups.get(k)!.lines.push(l);
+      if (code) await prisma.product.upsert({ where: { code }, create: { code, name: stripCode(l.name), source: 'po', seen: true }, update: { seen: true } });
+      continue;
+    }
     let sups: { id: string; name: string; to: string[]; cc: string[] }[] = [];
     if (code) {
       const p = await prisma.product.upsert({
@@ -71,17 +79,17 @@ export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileNam
     groups.get(key)!.lines.push(l);
   }
   const ymd = todayISO().replace(/-/g, ''), hash = sha256(buf), partial = groups.size > 1;
-  const out: { id: string; ref: string; item: string; pending: boolean }[] = [];
+  const out: { id: string; ref: string; item: string; pending: boolean; blocked: boolean }[] = [];
   for (const g of groups.values()) {
     const gpo: PoData = { ...po, lines: g.lines, partial, ...(partial ? { total: Math.round(g.lines.reduce((x, l) => x + l.total, 0) * 100) / 100 } : {}) };
-    const pending = g.route?.kind === 'pending';
+    const pending = g.route?.kind === 'pending', blocked = !!g.blocked;
     const d = await prisma.drop.create({ data: {
       ref: `OD-${ymd}-${String(await nextSeq()).padStart(4, '0')}`, linkId: opts.link.id, sourceName: opts.link.name, branchCode: opts.link.branchCode || '',
       branchName: po.buyer || '-', issuerName: po.issuedBy || opts.link.name, item: g.item, fileName: opts.fileName, size: buf.length, sha256: hash,
-      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: pending ? 'pending' : 'queued', ip: opts.ip,
+      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: blocked ? 'blocked' : pending ? 'pending' : 'queued', ip: opts.ip,
     } });
     fs.writeFileSync(dropFile(d.id), buf, { mode: 0o600 });
-    out.push({ id: d.id, ref: d.ref, item: g.item, pending });
+    out.push({ id: d.id, ref: d.ref, item: g.item, pending, blocked });
   }
   return out;
 }
@@ -137,11 +145,11 @@ function buildMail(d: DropRow, item: ItemTypeRow) {
 
 export async function deliverDrop(id: string) {
   const d = await prisma.drop.findUnique({ where: { id } });
-  if (!d || d.emailStatus === 'pending') return;
+  if (!d || d.emailStatus === 'pending' || d.emailStatus === 'blocked') return;
   await prisma.drop.update({ where: { id }, data: { emailStatus: 'sending', emailAttempts: { increment: 1 } } });
   try {
     const items = await itemTypes();
-    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], codes: [], words: [], sort: 0 };
+    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], codes: [], words: [], blocked: false, sort: 0 };
     const route = parseRoute(d.route);
     const rec = route?.kind === 'supplier' ? route : item; // supplier from product code wins over item-type recipients
     if (!rec.to.length) throw new Error('no recipient configured for ' + (route?.kind === 'supplier' ? route.supplierName : 'item ' + d.item));

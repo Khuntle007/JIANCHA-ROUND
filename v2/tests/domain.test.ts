@@ -59,6 +59,7 @@ describe('password rules', () => {
 
 describe('order drop', () => {
   const items = ITEM_GROUPS.map(i => ({ ...i }));
+  it('fresh milk is record-only (never forwarded)', () => { const fm = ITEM_GROUPS.find(g => g.key === 'fresh_milk')!; expect(fm.blocked).toBe(true); expect(fm.to).toEqual([]); expect(itemForLine('030024 - Fresh milk (2 Ltr.)', items)).toBe('fresh_milk'); });
   it('5 groups in the requested order', () => { expect(ITEM_GROUPS.map(g => g.label)).toEqual(['Yogurt', 'Creamcheese / Whipping cream', 'Fresh milk', 'Ice hot creamer', 'Fruits']); });
   it('group by product code first', () => {
     expect(itemForLine('030013 - Creamcheese (1 Kg) ครีมชีส (1 กก.)', items)).toBe('cream_whip');

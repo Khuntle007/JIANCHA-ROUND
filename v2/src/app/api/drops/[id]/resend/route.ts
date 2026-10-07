@@ -12,6 +12,7 @@ export const POST = route(async (_req: Request, { params }: Ctx) => {
   const d0 = await prisma.drop.findUnique({ where: { id } });
   if (!d0) throw new ApiError(404, 'not found');
   if (d0.emailStatus === 'pending') throw new ApiError(400, 'รายการนี้รอเลือก supplier ก่อน');
+  if (d0.emailStatus === 'blocked') throw new ApiError(400, 'สินค้าประเภทนี้ไม่ส่งต่อผ่านระบบ (บันทึกไว้เท่านั้น)');
   await deliverDrop(id);
   const d = await prisma.drop.findUniqueOrThrow({ where: { id } });
   await audit('drop.resent', { actor: me, target: d.ref, meta: { status: d.emailStatus } });

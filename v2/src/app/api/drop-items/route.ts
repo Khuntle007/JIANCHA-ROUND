@@ -10,7 +10,7 @@ const clean = (a: unknown) => (Array.isArray(a) ? a : []).map(e => str(e, 120)).
 /** Save item-type recipients; optionally add a new item type. 'other' may have no recipients. */
 export const PUT = route(async (req: Request) => {
   const me = await requireUser('orderDrop');
-  const b = await body<{ items?: { key: string; to: string[]; cc: string[] }[]; add?: { label?: string; labelTh?: string; to?: string[]; cc?: string[] } }>(req);
+  const b = await body<{ items?: { key: string; to: string[]; cc: string[]; blocked?: boolean }[]; add?: { label?: string; labelTh?: string; to?: string[]; cc?: string[] } }>(req);
   const items = await itemTypes();
   for (const it of b.items || []) {
     const cur = items.find(i => i.key === it.key);
@@ -18,8 +18,9 @@ export const PUT = route(async (req: Request) => {
     const to = clean(it.to), cc = clean(it.cc);
     const bad = [...to, ...cc].find(e => !emailOk(e));
     if (bad) throw new ApiError(400, 'อีเมลไม่ถูกต้อง: ' + bad);
-    if (!to.length && cur.key !== OTHER_KEY) throw new ApiError(400, cur.label + ': ต้องมีผู้รับอย่างน้อย 1 คน');
-    await prisma.itemType.update({ where: { key: cur.key }, data: { to: JSON.stringify(to), cc: JSON.stringify(cc) } });
+    const blocked = cur.key !== OTHER_KEY && (typeof it.blocked === 'boolean' ? it.blocked : cur.blocked);
+    if (!to.length && cur.key !== OTHER_KEY && !blocked) throw new ApiError(400, cur.label + ': ต้องมีผู้รับอย่างน้อย 1 คน');
+    await prisma.itemType.update({ where: { key: cur.key }, data: { to: JSON.stringify(to), cc: JSON.stringify(cc), blocked } });
   }
   if (b.add && str(b.add.label, 60)) {
     const label = str(b.add.label, 60), labelTh = str(b.add.labelTh, 60), to = clean(b.add.to), cc = clean(b.add.cc);

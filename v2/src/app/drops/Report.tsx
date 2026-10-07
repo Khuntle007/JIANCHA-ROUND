@@ -26,7 +26,7 @@ export function Report() {
     if (!res) return;
     const head = ['วันที่ส่ง', 'Ref', 'PO', 'สาขา (จาก PO)', 'ประเภท', 'Supplier', 'วันที่ออก PO', 'ลำดับ', 'รายการสินค้า', 'จำนวน', 'หน่วย', 'VAT', 'ราคา', 'รวม', 'ผู้ออกใบสั่ง', 'ลิงก์'];
     const q = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const body = res.rows.map(r => [r.day, r.ref, r.poNumber, r.branch, r.itemLabel, r.supplier || (r.pending ? 'รอเลือก' : ''), r.issuedDate, r.no, r.product, r.qty ?? '', r.unit, r.vat, r.price ?? '', r.total ?? '', r.issuer, r.source].map(q).join(','));
+    const body = res.rows.map(r => [r.day, r.ref, r.poNumber, r.branch, r.itemLabel, r.supplier || (r.pending ? 'รอเลือก' : r.emailStatus === 'blocked' ? 'ไม่ส่งต่อ' : ''), r.issuedDate, r.no, r.product, r.qty ?? '', r.unit, r.vat, r.price ?? '', r.total ?? '', r.issuer, r.source].map(q).join(','));
     const blob = new Blob(['﻿' + [head.map(q).join(','), ...body].join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `po-report-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
@@ -56,7 +56,7 @@ export function Report() {
             <td className="small" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(r.createdAt)}</td>
             <td style={{ whiteSpace: 'nowrap' }}><a href={`/api/drops/${r.dropId}/file`} target="_blank" rel="noopener"><b>{r.poNumber || '—'}</b></a><div className="small muted">{r.ref}</div></td>
             <td className="th small">{r.branch}</td>
-            <td className="small">{r.itemLabel}{r.supplier ? <div>→ {r.supplier}</div> : r.pending ? <div style={{ color: '#9a7b12' }}>รอเลือก supplier</div> : null}</td>
+            <td className="small">{r.itemLabel}{r.supplier ? <div>→ {r.supplier}</div> : r.pending ? <div style={{ color: 'var(--warn)' }}>รอเลือก supplier</div> : r.emailStatus === 'blocked' ? <div style={{ color: 'var(--bad)' }}>ไม่ส่งต่อ (บันทึกเท่านั้น)</div> : null}</td>
             <td className="th small">{r.product || <span className="muted">(ไม่มีรายละเอียด)</span>}</td>
             <td style={{ textAlign: 'right' }}>{r.qty ?? ''}</td><td className="small">{r.unit}</td>
             <td style={{ textAlign: 'right' }} className="small">{money(r.price)}</td><td style={{ textAlign: 'right' }}><b>{money(r.total)}</b></td>

@@ -239,6 +239,7 @@ model ItemType {
   cc      String @default("[]")
   codes   String @default("[]") // product codes that always belong to this group (checked first)
   words   String @default("[]") // extra name keywords (besides label / labelTh)
+  blocked Boolean @default(false) // not accepted via the portal: recorded only, never forwarded (e.g. fresh milk)
   sort    Int    @default(0)
 }
 

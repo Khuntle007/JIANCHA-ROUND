@@ -4,7 +4,7 @@ import { api, Modal } from '@/components/client';
 import { BrandBar } from '@/components/Emblem';
 
 const fmtSize = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
-type Done = { poNumber: string; buyer: string; drops: { ref: string; item: string }[] };
+type Done = { poNumber: string; buyer: string; drops: { ref: string; item: string }[]; blocked?: { message: string; items: string[] } };
 
 /** Upload-only franchise page: no login, shows nothing about past orders. */
 export function Portal({ token }: { token: string }) {
@@ -29,7 +29,7 @@ export function Portal({ token }: { token: string }) {
             if (!file) { setMsg('กรุณาแนบไฟล์ PDF'); return; }
             setBusy(true); setMsg('');
             try { setDone(await api<Done>(`/api/public/drop/${token}?filename=${encodeURIComponent(file.name)}`, { raw: file, headers: { 'Content-Type': 'application/pdf' } })); setFile(null); }
-            catch (x) { setMsg('ส่งไม่สำเร็จ: ' + (x as Error).message); }
+            catch (x) { const m = (x as Error).message; setMsg(m.startsWith('การจัดส่งไม่สำเร็จ') ? m : 'ส่งไม่สำเร็จ: ' + m); setFile(null); }
             setBusy(false);
           }}>
             <p className="th small" style={{ marginTop: 0 }}>แนบไฟล์ <b>ใบ PO (PURCHASE ORDER) จากระบบ PO</b> — ระบบจะอ่านสาขา รายการสินค้า และผู้ออกใบสั่งจากไฟล์ แล้วส่งต่อให้ supplier อัตโนมัติ</p>
@@ -40,15 +40,17 @@ export function Portal({ token }: { token: string }) {
               {file ? <div className="th"><b>{file.name}</b> <span className="muted small">{fmtSize(file.size)}</span><div className="small muted">คลิกเพื่อเปลี่ยนไฟล์</div></div>
                 : <div className="th">ลากไฟล์ PDF มาวาง หรือ <u>คลิกเพื่อเลือกไฟล์</u><div className="small muted">สูงสุด {fmtSize(info.maxBytes)}</div></div>}
             </div>
-            <div className="err th" role="alert" style={{ marginTop: '.4rem' }}>{msg}</div>
+            {msg ? <div className="th" role="alert" style={{ marginTop: '.8rem', background: 'var(--badbg)', color: 'var(--bad)', borderLeft: '3px solid var(--bad)', padding: '.8rem 1rem', fontSize: '.92rem', fontWeight: 500 }}>{msg}</div> : <div style={{ height: '.8rem' }} />}
             <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn gold" disabled={busy}>{busy ? 'กำลังส่ง…' : 'ส่งใบสั่ง'}</button></div>
           </form>
         </>}
         <div className="foot">JIAN CHA · Order Drop</div>
       </div>
-      {done && <Modal title="ส่งใบสั่งเรียบร้อย" onClose={() => setDone(null)} width={440}>
+      {done && <Modal title={done.blocked ? 'ส่งใบสั่งได้บางรายการ' : 'ส่งใบสั่งเรียบร้อย'} onClose={() => setDone(null)} width={460}>
         <p className="th" style={{ margin: '.2rem 0 .6rem', textAlign: 'center' }}><b>{done.poNumber}</b><br /><span className="small muted">{done.buyer}</span></p>
         <div className="small th" style={{ marginBottom: '1rem' }}>{done.drops.map(d => <div key={d.ref}>• {d.ref} · {d.item}</div>)}</div>
+        {done.blocked && <div className="th small" role="alert" style={{ background: 'var(--badbg)', color: 'var(--bad)', padding: '.7rem .8rem', marginBottom: '1rem' }}>
+          <b>{done.blocked.items.join(', ')}</b> — {done.blocked.message}</div>}
         <div className="row" style={{ justifyContent: 'center' }}><button className="btn gold" onClick={() => setDone(null)}>ตกลง</button></div>
       </Modal>}
     </>
