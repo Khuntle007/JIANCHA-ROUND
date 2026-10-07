@@ -7,7 +7,8 @@ import { prisma } from '../src/lib/db';
 import { env } from '../src/lib/env';
 import { cleanSlots } from '../src/lib/domain';
 import { isISODate } from '../src/lib/dates';
-import { DEFAULT_ITEMS, OTHER_KEY, normName } from '../src/lib/drop-catalog';
+import { ITEM_GROUPS, OTHER_KEY, normName } from '../src/lib/drop-catalog';
+import { applyItemGroups } from '../src/lib/item-groups';
 import { saveDropSettings, saveBcStatus } from '../src/lib/settings';
 import { ensureRoles } from './seed-admin';
 
@@ -62,7 +63,7 @@ async function importDrops(dropDir: string, replace: boolean) {
   const db = JSON.parse(fs.readFileSync(path.join(dropDir, 'db.json'), 'utf8'));
   if (replace) await prisma.$transaction([prisma.productSupplier.deleteMany(), prisma.product.deleteMany(), prisma.supplier.deleteMany(), prisma.itemType.deleteMany()]);
   // item types (live keys kept so old drops still resolve); 'other' last
-  const items: any[] = (db.items && db.items.length ? db.items : DEFAULT_ITEMS).filter((i: any) => i && i.key);
+  const items: any[] = (db.items && db.items.length ? db.items : ITEM_GROUPS).filter((i: any) => i && i.key);
   if (!items.some(i => i.key === OTHER_KEY)) items.push({ key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', to: [], cc: [] });
   for (const [n, i] of items.entries())
     await prisma.itemType.upsert({ where: { key: s(i.key, 40) }, create: { key: s(i.key, 40), label: s(i.label, 60) || i.key, labelTh: s(i.labelTh, 60), to: JSON.stringify(i.to || []), cc: JSON.stringify(i.cc || []), sort: i.key === OTHER_KEY ? 9999 : n },
@@ -113,6 +114,7 @@ async function importDrops(dropDir: string, replace: boolean) {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(filesOut, row.id + '.pdf')); else missing++;
     n++;
   }
+  (await applyItemGroups()).forEach(x => console.log('  group ' + x));
   const seq = Number(db.seq) || 0;
   const cur = await prisma.counter.findUnique({ where: { key: 'drop' } });
   await prisma.counter.upsert({ where: { key: 'drop' }, create: { key: 'drop', value: seq }, update: { value: Math.max(seq, cur?.value || 0) } });

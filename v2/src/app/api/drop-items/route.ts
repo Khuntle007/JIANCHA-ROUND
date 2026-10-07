@@ -29,7 +29,7 @@ export const PUT = route(async (req: Request) => {
     if (bad) throw new ApiError(400, 'อีเมลไม่ถูกต้อง: ' + bad);
     if (!to.length) throw new ApiError(400, label + ': ต้องมีผู้รับอย่างน้อย 1 คน');
     const maxSort = Math.max(0, ...items.filter(i => i.key !== OTHER_KEY).map(i => i.sort));
-    await prisma.itemType.create({ data: { key, label, labelTh, to: JSON.stringify(to), cc: JSON.stringify(cc), sort: maxSort + 1 } });
+    await prisma.itemType.create({ data: { key, label, labelTh, to: JSON.stringify(to), cc: JSON.stringify(cc), words: JSON.stringify([label, labelTh].filter(Boolean)), sort: maxSort + 1 } });
   }
   await audit('dropitems.updated', { actor: me, meta: b });
   return json({ ok: true, items: await itemTypes() });

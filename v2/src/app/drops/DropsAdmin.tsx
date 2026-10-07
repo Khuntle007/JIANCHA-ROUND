@@ -9,7 +9,7 @@ import { Products } from './Products';
 type Drop = { id: string; ref: string; poNumber: string; branchName: string; issuerName: string; item: string; fileName: string; size: number; sourceName: string; createdAt: string;
   emailStatus: string; emailError: string; emailTo: string; notifiedAt: string | null; supplierName: string; chosenBy: string; pendingCode: string; options: { id: string; name: string }[]; lines: { name: string; qty: number; unit: string }[] };
 type Link = { id: string; token: string; name: string; active: boolean; createdBy: string | null; lastUsedAt: string | null };
-type Item = { key: string; label: string; labelTh: string; to: string[]; cc: string[] };
+type Item = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[] };
 type Bc = { configured: boolean; lastSyncAt?: string; count?: number; company?: string; error?: string; failedAt?: string };
 const fmtSize = (n: number) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
 const split = (v: string) => v.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
@@ -93,11 +93,11 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
       {tab === 'products' && <Products settings={p.settings} bc={p.bc} />}
 
       {tab === 'routing' && <>
-        <div className="card th small" style={{ marginBottom: '.8rem' }}>ใช้เมื่อ<b>รหัสสินค้าใน PO ยังไม่ได้ผูก supplier</b> — ระบบจับประเภทจากชื่อสินค้าแล้วส่งตามตารางนี้ (ถ้าผูก supplier แล้ว จะส่งตาม supplier ในแท็บ สินค้า & Supplier แทน) · “Other” เว้นว่างได้ = บันทึกไว้แต่ไม่ส่ง</div>
+        <div className="card th small" style={{ marginBottom: '.8rem' }}>ใช้เมื่อ<b>รหัสสินค้าใน PO ยังไม่ได้ผูก supplier</b> — ระบบจับกลุ่มจาก<b>รหัสสินค้า</b>ก่อน แล้วจึงดูจากชื่อสินค้า แล้วส่งตามตารางนี้ (ถ้าผูก supplier แล้ว จะส่งตาม supplier ในแท็บ สินค้า & Supplier แทน) · “Other” เว้นว่างได้ = บันทึกไว้แต่ไม่ส่ง</div>
         <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
           <thead><tr><th>ประเภท</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th></tr></thead>
           <tbody>{p.items.map((i, n) => (
-            <tr key={i.key}><td><b>{i.label}</b><div className="small muted th">{i.labelTh}</div></td>
+            <tr key={i.key}><td><b>{i.label}</b><div className="small muted th">{i.labelTh}</div>{i.codes.length > 0 && <div className="small muted">รหัส {i.codes.join(', ')}</div>}</td>
               <td style={{ minWidth: 220 }}><input style={{ width: '100%' }} value={routing[n]?.to || ''} placeholder={i.key === 'other' ? 'ไม่บังคับ' : ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, to: e.target.value } : x)))} /></td>
               <td style={{ minWidth: 180 }}><input style={{ width: '100%' }} placeholder="ไม่บังคับ" value={routing[n]?.cc || ''} onChange={e => setRouting(r => r.map((x, j) => (j === n ? { ...x, cc: e.target.value } : x)))} /></td></tr>
           ))}</tbody></table></div></div>

@@ -4,7 +4,7 @@ import { prisma } from './db';
 import { env } from './env';
 import { hmac, safeEqual, sha256 } from './crypto';
 import { sendMail, escHtml } from './mail';
-import { OTHER_KEY, DEFAULT_ITEMS, normName, emailOk } from './drop-catalog';
+import { OTHER_KEY, ITEM_GROUPS, OTHER_GROUP, normName, emailOk } from './drop-catalog';
 import { todayISO } from './dates';
 import { codeOf, stripCode, type PoData, type PoLine } from './po';
 import { dropSettings } from './settings';
@@ -16,26 +16,28 @@ const J = <T>(s: string | null | undefined, d: T): T => { try { return s ? (JSON
 export type Route =
   | { kind: 'supplier'; supplierId: string; supplierName: string; to: string[]; cc: string[]; chosenBy?: string; chosenAt?: string }
   | { kind: 'pending'; code: string; options: { id: string; name: string; to: string[]; cc: string[] }[] };
-export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; sort: number };
+export type ItemTypeRow = { key: string; label: string; labelTh: string; to: string[]; cc: string[]; codes: string[]; words: string[]; sort: number };
 
 export const filesDir = () => { const d = path.join(env.dataDir, 'files'); fs.mkdirSync(d, { recursive: true }); return d; };
 export const dropFile = (id: string) => path.join(filesDir(), `${id}.pdf`);
 export const parseRoute = (s: string | null) => J<Route | null>(s, null);
 export const parsePoJson = (s: string | null) => J<PoData | null>(s, null);
 
-/** Item types, seeding the defaults on first use. 'other' always exists and is last. */
+/** Item groups, seeding the defaults on first use. 'other' always exists and is last. */
 export async function itemTypes(): Promise<ItemTypeRow[]> {
   if (!(await prisma.itemType.count()))
-    await prisma.itemType.createMany({ data: DEFAULT_ITEMS.map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', sort: i.key === OTHER_KEY ? 9999 : n })) });
+    await prisma.itemType.createMany({ data: [...ITEM_GROUPS, OTHER_GROUP].map((i, n) => ({ key: i.key, label: i.label, labelTh: i.labelTh, to: JSON.stringify(i.to), cc: '[]', codes: JSON.stringify(i.codes), words: JSON.stringify(i.words), sort: i.key === OTHER_KEY ? 9999 : n })) });
   if (!(await prisma.itemType.findUnique({ where: { key: OTHER_KEY } })))
-    await prisma.itemType.create({ data: { key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', sort: 9999 } });
-  return (await prisma.itemType.findMany({ orderBy: { sort: 'asc' } })).map(i => ({ ...i, to: J<string[]>(i.to, []), cc: J<string[]>(i.cc, []) }));
+    await prisma.itemType.create({ data: { key: OTHER_KEY, label: OTHER_GROUP.label, labelTh: OTHER_GROUP.labelTh, sort: 9999 } });
+  return (await prisma.itemType.findMany({ orderBy: { sort: 'asc' } })).map(i => ({ ...i, to: J<string[]>(i.to, []), cc: J<string[]>(i.cc, []), codes: J<string[]>(i.codes, []), words: J<string[]>(i.words, []) }));
 }
 
-/** First item type whose EN/TH label is contained in the line name, else 'other' (live behaviour). */
-export function itemForLine(name: string, items: ItemTypeRow[]) {
+/** Group for a PO line: product code first, then label / Thai label / keywords contained in the name, else 'other'. */
+export function itemForLine(name: string, items: Pick<ItemTypeRow, 'key' | 'label' | 'labelTh' | 'codes' | 'words'>[]) {
+  const code = codeOf(name);
+  if (code) { const byCode = items.find(i => i.key !== OTHER_KEY && i.codes.includes(code)); if (byCode) return byCode.key; }
   const n = normName(name);
-  const hit = items.find(i => i.key !== OTHER_KEY && [i.label, i.labelTh].some(w => normName(w).length >= 2 && n.includes(normName(w))));
+  const hit = items.find(i => i.key !== OTHER_KEY && [i.label, i.labelTh, ...i.words].some(w => normName(w).length >= 2 && n.includes(normName(w))));
   return hit ? hit.key : OTHER_KEY;
 }
 
@@ -139,7 +141,7 @@ export async function deliverDrop(id: string) {
   await prisma.drop.update({ where: { id }, data: { emailStatus: 'sending', emailAttempts: { increment: 1 } } });
   try {
     const items = await itemTypes();
-    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], sort: 0 };
+    const item = items.find(i => i.key === d.item) || { key: d.item, label: d.item, labelTh: '', to: [], cc: [], codes: [], words: [], sort: 0 };
     const route = parseRoute(d.route);
     const rec = route?.kind === 'supplier' ? route : item; // supplier from product code wins over item-type recipients
     if (!rec.to.length) throw new Error('no recipient configured for ' + (route?.kind === 'supplier' ? route.supplierName : 'item ' + d.item));

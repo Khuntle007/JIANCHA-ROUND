@@ -3,7 +3,7 @@ import { orderDayFor, deliverDayFor, sortRounds, lineMatch, lines, slotForOrderD
 import { todayISO, addDays, monIndex, isISODate, dmyToISO, isoToDMY, sameMonth } from '@/lib/dates';
 import { effectivePerms, parsePerms, SYSTEM_ROLES } from '@/lib/perms';
 import { passwordProblem } from '@/lib/auth-rules';
-import { emailOk, DEFAULT_ITEMS, OTHER_KEY } from '@/lib/drop-catalog';
+import { emailOk, ITEM_GROUPS, OTHER_KEY } from '@/lib/drop-catalog';
 import { parsePo, codeOf } from '@/lib/po';
 import { itemForLine } from '@/lib/drop';
 import fs from 'fs';
@@ -58,11 +58,21 @@ describe('password rules', () => {
 });
 
 describe('order drop', () => {
-  const items = DEFAULT_ITEMS.map((i, n) => ({ ...i, cc: [], sort: n }));
-  it('item type by ingredient name, else other', () => {
-    expect(itemForLine('030013 - Creamcheese (1 Kg) ครีมชีส (1 กก.)', items)).toBe('cream_cheese');
-    expect(itemForLine('030024 - Fresh milk (2 Ltr.)', items)).toBe('fresh_milk');
-    expect(itemForLine('010001 - Lemon', items)).toBe(OTHER_KEY);
+  const items = ITEM_GROUPS.map(i => ({ ...i }));
+  it('5 groups in the requested order', () => { expect(ITEM_GROUPS.map(g => g.label)).toEqual(['Yogurt', 'Creamcheese / Whipping cream', 'Fresh milk', 'Ice hot creamer', 'Fruits']); });
+  it('group by product code first', () => {
+    expect(itemForLine('030013 - Creamcheese (1 Kg) ครีมชีส (1 กก.)', items)).toBe('cream_whip');
+    expect(itemForLine('030014 - Whipping cream (1 Ltr.)', items)).toBe('cream_whip');
+    expect(itemForLine('030019 - Yogurt (2 Kg)', items)).toBe('yogurt');
+    expect(itemForLine('030012 - ice hot creamer ( 1 Ltr.)', items)).toBe('ice_hot_creamer');
+    expect(itemForLine('010001 - Lemon', items)).toBe('fruits');
+    expect(itemForLine('010045 - Green Mango', items)).toBe('fruits');
+  });
+  it('then by name keyword (TH/EN), else other', () => {
+    expect(itemForLine('039999 - นมสดพาสเจอร์ไรส์', items)).toBe('fresh_milk');
+    expect(itemForLine('039998 - Whipping topping', items)).toBe('cream_whip');
+    expect(itemForLine('050001 - Mango syrup', items)).toBe(OTHER_KEY); // fruit names alone never pull syrups into Fruits
+    expect(itemForLine('050002 - Cups 16oz', items)).toBe(OTHER_KEY);
   });
   it('product code', () => { expect(codeOf('030014 - Whipping cream')).toBe('030014'); expect(codeOf('Lemon')).toBe(''); });
   it('email validation', () => { expect(emailOk('a@b.co')).toBe(true); expect(emailOk('a@b')).toBe(false); expect(emailOk('a b@c.d')).toBe(false); });

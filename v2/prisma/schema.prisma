@@ -236,6 +236,8 @@ model ItemType {
   labelTh String @default("")
   to      String @default("[]")
   cc      String @default("[]")
+  codes   String @default("[]") // product codes that always belong to this group (checked first)
+  words   String @default("[]") // extra name keywords (besides label / labelTh)
   sort    Int    @default(0)
 }
 
