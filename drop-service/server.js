@@ -53,7 +53,8 @@ function loadDb() {
   db.items = db.items && db.items.length ? db.items : DEFAULT_ITEMS.map(i => ({ ...i }));
   // catch-all for PO lines that match no item: recorded + emailed to this item's recipients (empty = shows in back office as "waiting for SCM")
   if (!db.items.some(i => i.key === OTHER_KEY)) db.items.push({ key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', to: [], cc: [] });
-  db.products = db.products || [];   // product code (from PO / Business Central) -> suppliers
+  db.suppliers = db.suppliers || []; // central supplier directory: {id, name, to[], cc[]} — edited once, used by every product
+  db.products = db.products || [];   // product code (from PO / Business Central) -> supplier ids
   db.settings = Object.assign({ scmEmails: ['xxx@gmail.com'], reminderHours: 0 }, db.settings || {}); // placeholder SCM address: edit in back office
   db.settings.bc = db.settings.bc || {};
   db.seq = db.seq || 0;
@@ -203,10 +204,30 @@ function ensureProduct(code, name) {
   p.seen = true; if (!p.name && name) p.name = name;
   return p;
 }
-const cleanSuppliers = list => (Array.isArray(list) ? list : []).map(x => ({
-  id: cleanStr(x.id, 20) || id('s'), name: cleanStr(x.name, 80),
-  to: (x.to || []).map(e => cleanStr(e, 120)).filter(Boolean), cc: (x.cc || []).map(e => cleanStr(e, 120)).filter(Boolean),
-}));
+const supOf = p => (p.suppliers || []).map(sid => DB.suppliers.find(x => x.id === sid)).filter(Boolean);
+const pubProduct = p => ({ ...p, suppliers: supOf(p) });
+function checkSupplier(b) { // -> { error } | { name, to, cc }
+  const name = cleanStr(b.name, 80);
+  const to = (b.to || []).map(e => cleanStr(e, 120)).filter(Boolean), cc = (b.cc || []).map(e => cleanStr(e, 120)).filter(Boolean);
+  if (!name) return { error: 'ใส่ชื่อ supplier' };
+  if (!to.length) return { error: name + ': ต้องมีอีเมลอย่างน้อย 1' };
+  const bad = [...to, ...cc].find(e => !emailOk(e));
+  return bad ? { error: 'อีเมลไม่ถูกต้อง: ' + bad } : { name, to, cc };
+}
+function migrateSuppliers() { // older data stored suppliers inline per product -> move into the directory (same name + same emails = same supplier)
+  let changed = false;
+  const key = x => normName(x.name) + '|' + (x.to || []).map(e => e.toLowerCase()).sort().join(',');
+  for (const p of DB.products) {
+    p.suppliers = (p.suppliers || []).map(x => {
+      if (typeof x === 'string') return x;
+      changed = true;
+      let t = DB.suppliers.find(y => key(y) === key(x));
+      if (!t) { t = { id: x.id && !DB.suppliers.some(y => y.id === x.id) ? x.id : id('s'), name: x.name, to: x.to || [], cc: x.cc || [] }; DB.suppliers.push(t); }
+      return t.id;
+    });
+  }
+  if (changed) saveDb();
+}
 const bcConf = () => {
   const tenant = process.env.BC_TENANT_ID || process.env.GRAPH_TENANT_ID || '';
   return { tenant, client: process.env.BC_CLIENT_ID || process.env.GRAPH_CLIENT_ID || '', secret: process.env.BC_CLIENT_SECRET || process.env.GRAPH_CLIENT_SECRET || '',
@@ -520,7 +541,7 @@ async function handle(req, res) {
       for (const l of po.lines) {
         const code = codeOf(l.name), prod = code ? ensureProduct(code, l.name.replace(/^\s*\d+\s*-\s*/, '').trim()) : null;
         let key, route = null;
-        const sup = prod ? prod.suppliers.filter(x => x.to && x.to.length) : [];
+        const sup = prod ? supOf(prod).filter(x => x.to && x.to.length) : [];
         if (sup.length === 1) { route = { kind: 'supplier', supplierId: sup[0].id, supplierName: sup[0].name, to: sup[0].to, cc: sup[0].cc || [] }; key = 'to:' + sup[0].to.slice().sort().join(','); }
         else if (sup.length > 1) { route = { kind: 'pending', code, options: sup.map(x => ({ id: x.id, name: x.name, to: x.to, cc: x.cc || [] })) }; key = 'pending:' + code; }
         else key = 'item:' + itemForLine(l.name);
@@ -601,7 +622,8 @@ async function handle(req, res) {
       const b = await readJson(req);
       const o = d.route.options.find(x => x.id === cleanStr(b.supplierId, 20));
       if (!o) return send(res, 400, { error: 'supplier ไม่ถูกต้อง' });
-      d.route = { kind: 'supplier', supplierId: o.id, supplierName: o.name, to: o.to, cc: o.cc || [], chosenBy: actor, chosenAt: new Date().toISOString() };
+      const cur = DB.suppliers.find(x => x.id === o.id) || o; // latest emails if the directory was edited while waiting
+      d.route = { kind: 'supplier', supplierId: cur.id, supplierName: cur.name, to: cur.to, cc: cur.cc || [], chosenBy: actor, chosenAt: new Date().toISOString() };
       d.email = { status: 'queued', attempts: 0 }; saveDb();
       await deliver(d);
       return send(res, 200, { drop: pubDrop(d, true) });
@@ -610,22 +632,40 @@ async function handle(req, res) {
       const q = cleanStr(u.searchParams.get('q'), 60).toLowerCase();
       let list = DB.products.filter(p => q ? (p.code + ' ' + p.name).toLowerCase().includes(q) : (p.suppliers.length || p.seen));
       const total = list.length; list = list.sort((x, y) => x.code.localeCompare(y.code)).slice(0, 100);
-      return send(res, 200, { products: list, total, all: DB.products.length });
+      return send(res, 200, { products: list.map(pubProduct), total, all: DB.products.length });
     }
-    if (M === 'POST' && seg[1] === 'products' && seg[2]) { // set the suppliers of one product code (creates it if unknown)
+    if (M === 'POST' && seg[1] === 'products' && seg[2]) { // choose which directory suppliers sell this product code (creates the code if unknown)
       const b = await readJson(req), code = cleanStr(seg[2], 40);
       if (!/^[A-Za-z0-9._-]{1,40}$/.test(code)) return send(res, 400, { error: 'รหัสสินค้าไม่ถูกต้อง' });
-      const sup = cleanSuppliers(b.suppliers);
-      for (const x of sup) {
-        if (!x.name) return send(res, 400, { error: 'ใส่ชื่อ supplier ทุกเจ้า' });
-        if (!x.to.length) return send(res, 400, { error: x.name + ': ต้องมีอีเมลอย่างน้อย 1' });
-        const bad = [...x.to, ...x.cc].find(e => !emailOk(e));
-        if (bad) return send(res, 400, { error: 'อีเมลไม่ถูกต้อง: ' + bad });
-      }
+      const ids = [...new Set((Array.isArray(b.supplierIds) ? b.supplierIds : []).map(x => cleanStr(x, 20)))];
+      const missing = ids.find(x => !DB.suppliers.some(y => y.id === x));
+      if (missing) return send(res, 400, { error: 'ไม่พบ supplier ในสมุดรายชื่อ' });
       let p = DB.products.find(x => x.code === code);
       if (!p) { p = { code, name: cleanStr(b.name, 200), source: 'manual', suppliers: [] }; DB.products.push(p); }
-      p.suppliers = sup; saveDb();
-      return send(res, 200, { product: p });
+      p.suppliers = ids; saveDb();
+      return send(res, 200, { product: pubProduct(p) });
+    }
+    if (seg[1] === 'suppliers') { // central supplier directory
+      const used = sid => DB.products.filter(p => (p.suppliers || []).includes(sid)).length;
+      if (M === 'GET' && !seg[2]) return send(res, 200, { suppliers: DB.suppliers.slice().sort((x, y) => x.name.localeCompare(y.name)).map(x => ({ ...x, products: used(x.id) })) });
+      if (M === 'POST') { // create (no id) or update (id) — an update changes the emails for every product using it
+        const b = await readJson(req), v = checkSupplier(b);
+        if (v.error) return send(res, 400, { error: v.error });
+        const tid = seg[2] || '';
+        let t = tid ? DB.suppliers.find(x => x.id === tid) : null;
+        if (tid && !t) return send(res, 404, { error: 'not found' });
+        if (DB.suppliers.some(x => x.id !== (t && t.id) && normName(x.name) === normName(v.name))) return send(res, 409, { error: 'มี supplier ชื่อนี้อยู่แล้ว' });
+        if (!t) { t = { id: id('s') }; DB.suppliers.push(t); }
+        Object.assign(t, v); saveDb();
+        return send(res, 200, { supplier: { ...t, products: used(t.id) } });
+      }
+      if (M === 'DELETE' && seg[2]) {
+        const n = used(seg[2]);
+        if (n && u.searchParams.get('force') !== '1') return send(res, 409, { error: 'supplier นี้ใช้อยู่ใน ' + n + ' รหัสสินค้า', products: n });
+        DB.products.forEach(p => { p.suppliers = (p.suppliers || []).filter(x => x !== seg[2]); });
+        DB.suppliers = DB.suppliers.filter(x => x.id !== seg[2]); saveDb();
+        return send(res, 200, { ok: true });
+      }
     }
     if (M === 'POST' && seg[1] === 'settings') {
       const b = await readJson(req);
@@ -712,6 +752,7 @@ async function handle(req, res) {
   return send(res, 404, { error: 'not found' });
 }
 
+migrateSuppliers();
 /* reminders for lines still waiting for SCM (off by default: settings.reminderHours = 0) + daily Business Central sync */
 setInterval(() => {
   const h = DB.settings.reminderHours;

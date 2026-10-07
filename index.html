@@ -1709,13 +1709,16 @@ function drawPending(tab,u){
         .then(j=>{const i=d.drops.findIndex(y=>y.id===x.id);d.drops[i]=j.drop;drawDrops(u);toast(j.drop.email.status==='failed'?'ส่งไม่สำเร็จ: '+(j.drop.email.error||''):'ส่งอีเมลให้ '+o.name+' แล้ว')}).catch(e=>toast(e.message))},{yes:'ส่งเลย'});
   });
 }
-let PROD={q:'',data:null};
+let PROD={q:'',data:null,view:'products',sup:null};
+const prodNav=()=>`<div class="tabs" style="margin-bottom:1rem"><button data-pv="products" class="${PROD.view==='products'?'on':''}">สินค้า</button><button data-pv="suppliers" class="${PROD.view==='suppliers'?'on':''}">สมุดรายชื่อ supplier</button></div>`;
+const bindProdNav=(tab,u)=>$$('[data-pv]').forEach(b=>b.onclick=()=>{PROD.view=b.dataset.pv;PROD.data=null;drawProducts(tab,u)});
 function drawProducts(tab,u){
   const d=DROP_VIEW.data, st=d.settings||{scmEmails:[],reminderHours:0}, bc=d.bc||{};
+  if(PROD.view==='suppliers')return drawSuppliers(tab,u);
   const load=()=>dropFetch('/admin/products?q='+encodeURIComponent(PROD.q),{},S.dropToken).then(j=>{PROD.data=j;drawProducts(tab,u)}).catch(e=>toast(e.message));
   if(!PROD.data){tab.innerHTML='<div class="card"><div class="empty th">กำลังโหลด…</div></div>';load();return}
   const pd=PROD.data;
-  tab.innerHTML=`<div class="grid2" style="margin-bottom:1rem">
+  tab.innerHTML=prodNav()+`<div class="grid2" style="margin-bottom:1rem">
     <div class="card"><div class="kicker" style="margin-bottom:.5rem">แจ้งเตือนทีม SCM (เมื่อมีรายการรอเลือก supplier)</div>
       <div class="field"><label>อีเมลทีม SCM (คั่นด้วย , )</label><input id="s_mail" value="${esc((st.scmEmails||[]).join(', '))}" placeholder="xxx@gmail.com"></div>
       <div class="field"><label>เตือนซ้ำทุก (ชั่วโมง) — 0 = แจ้งครั้งเดียว</label><input id="s_rem" type="number" min="0" max="720" value="${esc(st.reminderHours||0)}" style="max-width:140px"></div>
@@ -1732,6 +1735,7 @@ function drawProducts(tab,u){
       <td class="small th">${p.suppliers.length?p.suppliers.map(x=>`<span class="chip" title="${esc(x.to.join(', '))}">${esc(x.name)}</span>`).join(''):'<span class="muted">—</span>'}</td>
       <td class="small th">${p.suppliers.length===0?'<span class="muted">ยังไม่ตั้งค่า (ใช้กฎตามประเภทสินค้า)</span>':p.suppliers.length===1?'<span class="estat sent">ส่งอัตโนมัติ</span>':'<span class="estat wait">รอ SCM เลือก</span>'}</td>
       <td><button class="btn sm ghost" data-ep="${esc(p.code)}">ตั้งค่า supplier</button></td></tr>`).join(''):'<tr><td colspan="5"><div class="empty th">ไม่พบสินค้า</div></td></tr>'}</tbody></table></div></div>`;
+  bindProdNav(tab,u);
   $('#s_save').onclick=()=>{
     const scmEmails=$('#s_mail').value.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
     dropFetch('/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scmEmails,reminderHours:+$('#s_rem').value||0})},S.dropToken)
@@ -1744,29 +1748,56 @@ function drawProducts(tab,u){
   $('#p_new').onclick=()=>productModal({code:'',name:'',suppliers:[]},true,tab,u);
   $$('[data-ep]').forEach(b=>b.onclick=()=>productModal(pd.products.find(p=>p.code===b.dataset.ep),false,tab,u));
 }
-function productModal(p,isNew,tab,u){
-  const sup=JSON.parse(JSON.stringify(p.suppliers)); if(!sup.length)sup.push({name:'',to:[],cc:[]});
-  const draw=()=>{
-    openModal(`<div class="modal" style="max-width:640px"><button class="x" onclick="closeModal()">×</button>
+function drawSuppliers(tab,u){
+  const load=()=>dropFetch('/admin/suppliers',{},S.dropToken).then(j=>{PROD.sup=j.suppliers;drawSuppliers(tab,u)}).catch(e=>toast(e.message));
+  if(!PROD.sup){tab.innerHTML=prodNav()+'<div class="card"><div class="empty th">กำลังโหลด…</div></div>';bindProdNav(tab,u);load();return}
+  const L=PROD.sup;
+  tab.innerHTML=prodNav()+`<div class="row" style="justify-content:space-between;margin-bottom:.7rem"><div class="small muted th">แก้อีเมลของ supplier ที่นี่ครั้งเดียว มีผลกับทุกรหัสสินค้าที่ใช้ supplier นี้</div><button class="btn gold" id="sp_new">+ เพิ่ม supplier</button></div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>ชื่อ supplier</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th><th>ใช้ใน</th><th></th></tr></thead><tbody>${L.length?L.map(x=>`<tr>
+      <td class="th"><b>${esc(x.name)}</b></td><td class="small">${esc(x.to.join(', '))}</td><td class="small">${esc((x.cc||[]).join(', '))||'<span class="muted">—</span>'}</td>
+      <td class="small">${x.products} รหัสสินค้า</td>
+      <td style="white-space:nowrap"><button class="btn sm ghost" data-es="${esc(x.id)}">แก้</button> <button class="btn sm ghost" data-ds="${esc(x.id)}">ลบ</button></td></tr>`).join(''):'<tr><td colspan="5"><div class="empty th">ยังไม่มี supplier — กด “+ เพิ่ม supplier”</div></td></tr>'}</tbody></table></div></div>`;
+  bindProdNav(tab,u);
+  $('#sp_new').onclick=()=>supplierModal(null,()=>{PROD.sup=null;drawSuppliers(tab,u)});
+  $$('[data-es]').forEach(b=>b.onclick=()=>supplierModal(L.find(x=>x.id===b.dataset.es),()=>{PROD.sup=null;PROD.data=null;drawSuppliers(tab,u)}));
+  $$('[data-ds]').forEach(b=>b.onclick=()=>{const x=L.find(y=>y.id===b.dataset.ds);
+    confirmDialog(x.products?`ลบ ${x.name}? ใช้อยู่ใน ${x.products} รหัสสินค้า จะถูกเอาออกจากรหัสเหล่านั้นด้วย`:`ลบ ${x.name}?`,()=>
+      dropFetch('/admin/suppliers/'+x.id+'?force=1',{method:'DELETE'},S.dropToken).then(()=>{PROD.sup=null;PROD.data=null;drawSuppliers(tab,u);toast('ลบแล้ว')}).catch(e=>toast(e.message)),{danger:true,yes:'ลบ'})});
+}
+function supplierModal(x,done){
+  const isNew=!x, split=v=>v.split(/[,;\s]+/).map(t=>t.trim()).filter(Boolean);
+  openModal(`<div class="modal" style="max-width:520px"><button class="x" onclick="closeModal()">×</button><h2>${isNew?'เพิ่ม supplier':'แก้ supplier'}</h2>
+    <div class="field"><label>ชื่อ supplier</label><input id="sm_name" maxlength="80" value="${esc(x?x.name:'')}"></div>
+    <div class="field"><label>ส่งถึง (To) — หลายอีเมลคั่นด้วย ,</label><input id="sm_to" value="${esc(x?x.to.join(', '):'')}" placeholder="a@jianchatea.com, b@jianchatea.com"></div>
+    <div class="field"><label>สำเนา (CC) — ไม่บังคับ</label><input id="sm_cc" value="${esc(x?(x.cc||[]).join(', '):'')}"></div>
+    ${!isNew&&x.products?`<div class="small muted th">การแก้ไขมีผลกับ ${x.products} รหัสสินค้าที่ใช้ supplier นี้ และกับใบสั่งที่ส่งหลังจากนี้</div>`:''}
+    <div class="row" style="justify-content:flex-end;margin-top:.9rem"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="sm_save">บันทึก</button></div></div>`);
+  $('#sm_save').onclick=()=>{const body={name:$('#sm_name').value.trim(),to:split($('#sm_to').value),cc:split($('#sm_cc').value)};
+    dropFetch('/admin/suppliers'+(isNew?'':'/'+x.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},S.dropToken)
+      .then(j=>{closeModal();toast('บันทึกแล้ว');done(j.supplier)}).catch(e=>toast(e.message))};
+}
+function productModal(p,isNew,tab,u,preset){
+  const sel=new Set(preset||p.suppliers.map(x=>x.id));
+  const go=()=>{
+    if(!PROD.sup){dropFetch('/admin/suppliers',{},S.dropToken).then(j=>{PROD.sup=j.suppliers;go()}).catch(e=>toast(e.message));return}
+    const L=PROD.sup;
+    openModal(`<div class="modal" style="max-width:600px"><button class="x" onclick="closeModal()">×</button>
       <h2>${isNew?'เพิ่มรหัสสินค้า':'Supplier ของสินค้า'}</h2>
       ${isNew?`<div class="grid2"><div class="field"><label>รหัสสินค้า</label><input id="pm_code" placeholder="เช่น 030013"></div><div class="field"><label>ชื่อ</label><input id="pm_name"></div></div>`:`<div class="th" style="margin:.3rem 0 .8rem"><b>${esc(p.code)}</b> · ${esc(p.name)}</div>`}
-      <div class="small muted th" style="margin-bottom:.6rem">1 เจ้า = ส่งอัตโนมัติ · มากกว่า 1 เจ้า = ระบบไม่ส่งเอง รอ SCM เลือกทุกครั้ง · ไม่ใส่เลย = ใช้กฎตามประเภทสินค้า</div>
-      ${sup.map((x,i)=>`<div class="card" style="margin-bottom:.6rem;padding:.7rem"><div class="grid2"><div class="field"><label>ชื่อ supplier</label><input data-sn="${i}" value="${esc(x.name)}"></div>
-        <div class="field"><label>ส่งถึง (To) คั่นด้วย ,</label><input data-st="${i}" value="${esc(x.to.join(', '))}"></div></div>
-        <div class="grid2"><div class="field" style="margin:0"><label>สำเนา (CC)</label><input data-sc="${i}" value="${esc((x.cc||[]).join(', '))}"></div><div style="text-align:right;align-self:end"><button class="btn sm ghost" data-sd="${i}">ลบ supplier นี้</button></div></div></div>`).join('')}
-      <button class="btn ghost" id="pm_add">+ เพิ่ม supplier</button>
+      <div class="small muted th" style="margin-bottom:.6rem">ติ๊กเลือก supplier ที่ขายสินค้านี้ · 1 เจ้า = ส่งอัตโนมัติ · มากกว่า 1 เจ้า = ระบบไม่ส่งเอง รอ SCM เลือกทุกครั้ง · ไม่เลือกเลย = ใช้กฎตามประเภทสินค้า</div>
+      <input id="pm_q" placeholder="ค้นหา supplier…" style="margin-bottom:.4rem;width:100%">
+      <div class="scopebox" id="pm_list" style="max-height:260px;overflow:auto">${L.length?L.map(x=>`<label data-n="${esc((x.name+' '+x.to.join(' ')).toLowerCase())}"><input type="checkbox" value="${esc(x.id)}" ${sel.has(x.id)?'checked':''}> <b>${esc(x.name)}</b> <span class="muted small">${esc(x.to.join(', '))}</span></label>`).join(''):'<div class="empty th small">ยังไม่มี supplier ในสมุดรายชื่อ — กด “+ supplier ใหม่”</div>'}</div>
+      <div style="margin-top:.6rem"><button class="btn sm ghost" id="pm_new">+ supplier ใหม่</button></div>
       <div class="row" style="justify-content:flex-end;margin-top:.9rem"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="pm_save">บันทึก</button></div></div>`);
-    const split=v=>v.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
-    const read=()=>{sup.forEach((x,i)=>{x.name=$(`[data-sn="${i}"]`).value.trim();x.to=split($(`[data-st="${i}"]`).value);x.cc=split($(`[data-sc="${i}"]`).value)})};
-    $('#pm_add').onclick=()=>{read();sup.push({name:'',to:[],cc:[]});draw()};
-    $$('[data-sd]').forEach(b=>b.onclick=()=>{read();sup.splice(+b.dataset.sd,1);draw()});
-    $('#pm_save').onclick=()=>{read();
+    $('#pm_q').oninput=e=>{const q=e.target.value.toLowerCase();$$('#pm_list label').forEach(l=>l.style.display=(l.dataset.n||'').includes(q)?'':'none')};
+    $('#pm_list').onchange=e=>{e.target.checked?sel.add(e.target.value):sel.delete(e.target.value)};
+    $('#pm_new').onclick=()=>supplierModal(null,n=>{PROD.sup=null;sel.add(n.id);go()});
+    $('#pm_save').onclick=()=>{
       const code=isNew?$('#pm_code').value.trim():p.code; if(!code){toast('ใส่รหัสสินค้า');return}
-      const suppliers=sup.filter(x=>x.name||x.to.length);
-      dropFetch('/admin/products/'+encodeURIComponent(code),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:isNew?$('#pm_name').value.trim():p.name,suppliers})},S.dropToken)
-        .then(()=>{closeModal();PROD.data=null;drawProducts(tab,u);toast('บันทึกแล้ว')}).catch(e=>toast(e.message))};
+      dropFetch('/admin/products/'+encodeURIComponent(code),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:isNew?$('#pm_name').value.trim():p.name,supplierIds:[...sel]})},S.dropToken)
+        .then(()=>{closeModal();PROD.data=null;PROD.sup=null;drawProducts(tab,u);toast('บันทึกแล้ว')}).catch(e=>toast(e.message))};
   };
-  draw();
+  go();
 }
 
 /* ---------- PO report (shared by franchise portal + back office) ---------- */
