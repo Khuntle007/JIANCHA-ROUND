@@ -6,20 +6,24 @@ import { dropSettings, bcStatus } from '@/lib/settings';
 import { bcConfigured } from '@/lib/bc';
 import { env } from '@/lib/env';
 import { DropsAdmin } from './DropsAdmin';
+import { RoutingMap } from './RoutingMap';
+import { routingMap } from '@/lib/routing-map';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DropsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const u = await requirePage('orderDrop', '/drops');
-  const [drops, links, items, settings, bc, branches] = await Promise.all([
+  const [drops, links, items, settings, bc, branches, map] = await Promise.all([
     prisma.drop.findMany({ orderBy: { createdAt: 'desc' }, take: 1000 }),
     prisma.dropLink.findMany({ orderBy: [{ branchCode: 'asc' }, { createdAt: 'asc' }] }),
     itemTypes(), dropSettings(), bcStatus(),
     prisma.branch.findMany({ where: { active: true }, orderBy: { code: 'asc' }, select: { code: true, nameEn: true } }),
+    routingMap(),
   ]);
   return (
     <Shell user={u} active="/drops">
       <DropsAdmin initialTab={(await searchParams).tab} isMain={u.role.key === 'MAIN_ADMIN'} appUrl={env.appUrl} mailFrom={env.mailSender} dryRun={env.mailDryRun}
+        routingMap={<RoutingMap groups={map} />}
         settings={settings} bc={{ ...bc, configured: bcConfigured() }} items={items} branches={branches.map(b => ({ code: b.code, name: b.nameEn }))}
         drops={drops.map(d => {
           const po = parsePoJson(d.po), r = parseRoute(d.route);

@@ -223,3 +223,14 @@ tr.filters th{background:#fff;padding:.3rem .35rem;text-transform:none;letter-sp
 tr.filters input,tr.filters select{width:100%;min-width:70px;padding:.3em .4em;border:1px solid var(--jc-border);font-size:.75rem;font-family:var(--jc-font-thai);background:#fff}
 tr.filters input[type=date]{min-width:118px;display:block;margin-bottom:2px}
 th[aria-sort]:hover{color:var(--jc-ink)}
+
+.routemap{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.8rem}
+.rm-group{border:1px solid var(--jc-border);border-top:2px solid var(--jc-gold);padding:.7rem .8rem;background:#fff}
+.rm-head{margin-bottom:.45rem}
+.rm-section{padding:.35rem 0;border-top:1px dashed var(--jc-border)}
+.rm-section:first-of-type{border-top:0}
+.rm-rule{display:grid;grid-template-columns:minmax(0,9rem) 1rem minmax(0,1fr);gap:.4rem;align-items:start;padding:.3rem 0}
+.rm-branch{font-weight:600}
+.rm-arrow{color:var(--jc-gold-dark)}
+.rm-rule span{overflow-wrap:anywhere}
+.rm-blocked{display:block;background:var(--badbg);color:var(--bad);padding:.5rem .6rem}

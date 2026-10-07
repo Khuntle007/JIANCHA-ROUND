@@ -17,7 +17,7 @@ const split = (v: string) => v.split(/[,;\s]+/).map(x => x.trim()).filter(Boolea
 type Tab = 'drops' | 'pending' | 'report' | 'products' | 'routing' | 'links';
 
 export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: string; mailFrom: string; dryRun: boolean; drops: Drop[]; links: Link[]; items: Item[];
-  settings: { scmEmails: string[]; reminderHours: number; alwaysCc: string[] }; bc: Bc; branches: { code: string; name: string }[] }) {
+  settings: { scmEmails: string[]; reminderHours: number; alwaysCc: string[] }; bc: Bc; branches: { code: string; name: string }[]; routingMap: React.ReactNode }) {
   const router = useRouter();
   const pending = p.drops.filter(d => d.emailStatus === 'pending');
   const [tab, setTab] = useState<Tab>((['drops', 'pending', 'report', 'products', 'routing', 'links'] as Tab[]).includes(p.initialTab as Tab) ? (p.initialTab as Tab) : 'drops');
@@ -59,6 +59,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
       {tab === 'products' && <Products settings={p.settings} bc={p.bc} branches={p.branches} />}
 
       {tab === 'routing' && <>
+        {p.routingMap}
         <div className="card th small" style={{ marginBottom: '.8rem' }}>ผู้รับในตารางนี้ใช้เมื่อ<b>รหัสสินค้าใน PO ยังไม่ได้ผูก supplier</b> (คำนำหน้า Subject และ “ไม่ใส่ CC กลาง” ใช้กับทุกอีเมลของประเภทนั้นเสมอ) — — ระบบจับกลุ่มจาก<b>รหัสสินค้า</b>ก่อน แล้วจึงดูจากชื่อสินค้า แล้วส่งตามตารางนี้ (ถ้าผูก supplier แล้ว จะส่งตาม supplier ในแท็บ สินค้า & Supplier แทน) · “Other” เว้นว่างได้ = บันทึกไว้แต่ไม่ส่ง</div>
         <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
           <thead><tr><th>ประเภท</th><th>ไม่รับผ่านระบบ</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th><th>คำนำหน้า Subject</th><th>ไม่ใส่ CC กลาง</th></tr></thead>
