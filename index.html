@@ -1657,9 +1657,9 @@ function drawPortal(){
       <div class="row" style="justify-content:flex-end"><button class="btn gold" id="fGo">ส่งใบสั่ง</button></div>
     </form>
     <div style="height:1.2rem"></div>
-    <div class="kicker" style="margin-bottom:.5rem">ใบสั่งที่ส่งแล้ว</div>
-    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา (จาก PO)</th><th>รายการ</th><th>ผู้สั่ง</th><th>สถานะ</th></tr></thead>
-      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b>${x.poNumber?`<div class="small muted">${esc(x.poNumber)}</div>`:''}</td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td><td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
+    <div class="kicker" style="margin-bottom:.5rem">ใบสั่งที่ส่งแล้ว${me.account.portalAdmin?' (ทุกบัญชี)':''}</div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา (จาก PO)</th><th>รายการ</th><th>ผู้สั่ง</th>${me.account.portalAdmin?'<th>บัญชี</th>':''}<th>สถานะ</th></tr></thead>
+      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b>${x.poNumber?`<div class="small muted">${esc(x.poNumber)}</div>`:''}</td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td>${me.account.portalAdmin?`<td class="small">${esc(x.accountName||x.username)}</td>`:''}<td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
     me.account.name+' · '+me.account.username);
   $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};renderPortal()};
   const z=$('#fZ'), f=$('#fF');

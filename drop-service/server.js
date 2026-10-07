@@ -503,7 +503,8 @@ async function handle(req, res) {
       return send(res, 200, { account: pubAccount(a), branches: allowed, items: pubItems(), maxBytes: MAX_PDF });
     }
     if (M === 'GET' && seg[1] === 'drops' && !seg[2]) {
-      return send(res, 200, { drops: DB.drops.filter(d => d.accountId === a.id).slice(-200).reverse().map(d => pubDrop(d)) });
+      // franchise users see only their own sent orders; portal admins (SCM/admin side) see every account's
+      return send(res, 200, { drops: DB.drops.filter(d => a.portalAdmin || d.accountId === a.id).slice(-200).reverse().map(d => pubDrop(d)) });
     }
     if (M === 'GET' && seg[1] === 'report') {
       if (!canReport(a)) return send(res, 403, { error: 'ไม่มีสิทธิ์เข้าหน้ารายงาน' });
