@@ -9,7 +9,9 @@ type Ctx = { params: Promise<{ id: string }> };
 export const POST = route(async (_req: Request, { params }: Ctx) => {
   const me = await requireUser('orderDrop');
   const id = (await params).id;
-  if (!(await prisma.drop.findUnique({ where: { id } }))) throw new ApiError(404, 'not found');
+  const d0 = await prisma.drop.findUnique({ where: { id } });
+  if (!d0) throw new ApiError(404, 'not found');
+  if (d0.emailStatus === 'pending') throw new ApiError(400, 'รายการนี้รอเลือก supplier ก่อน');
   await deliverDrop(id);
   const d = await prisma.drop.findUniqueOrThrow({ where: { id } });
   await audit('drop.resent', { actor: me, target: d.ref, meta: { status: d.emailStatus } });

@@ -3,7 +3,11 @@ import { orderDayFor, deliverDayFor, sortRounds, lineMatch, lines, slotForOrderD
 import { todayISO, addDays, monIndex, isISODate, dmyToISO, isoToDMY, sameMonth } from '@/lib/dates';
 import { effectivePerms, parsePerms, SYSTEM_ROLES } from '@/lib/perms';
 import { passwordProblem } from '@/lib/auth-rules';
-import { CATALOG, LEGACY_ITEM, emailOk } from '@/lib/drop-catalog';
+import { emailOk, DEFAULT_ITEMS, OTHER_KEY } from '@/lib/drop-catalog';
+import { parsePo, codeOf } from '@/lib/po';
+import { itemForLine } from '@/lib/drop';
+import fs from 'fs';
+import path from 'path';
 
 describe('weekend rules (ported from v1)', () => {
   it('Sunday order moves to Friday', () => { expect(orderDayFor(0)).toBe(4); expect(orderDayFor(2)).toBe(1); });
@@ -53,8 +57,22 @@ describe('password rules', () => {
   });
 });
 
-describe('order drop catalog', () => {
-  it('5 supplier groups, cream cheese + whipping cream together', () => { expect(CATALOG.map(c => c.key)).toEqual(['sp004', 'sp036', 'sp162', 'sp011', 'sp163']); expect(CATALOG[1].ingredients.length).toBe(2); });
-  it('legacy keys map to groups', () => { expect(LEGACY_ITEM.cream_cheese).toBe('sp036'); expect(LEGACY_ITEM.whipping_cream).toBe('sp036'); });
+describe('order drop', () => {
+  const items = DEFAULT_ITEMS.map((i, n) => ({ ...i, cc: [], sort: n }));
+  it('item type by ingredient name, else other', () => {
+    expect(itemForLine('030013 - Creamcheese (1 Kg) ครีมชีส (1 กก.)', items)).toBe('cream_cheese');
+    expect(itemForLine('030024 - Fresh milk (2 Ltr.)', items)).toBe('fresh_milk');
+    expect(itemForLine('010001 - Lemon', items)).toBe(OTHER_KEY);
+  });
+  it('product code', () => { expect(codeOf('030014 - Whipping cream')).toBe('030014'); expect(codeOf('Lemon')).toBe(''); });
   it('email validation', () => { expect(emailOk('a@b.co')).toBe(true); expect(emailOk('a@b')).toBe(false); expect(emailOk('a b@c.d')).toBe(false); });
+  const fixture = path.join(__dirname, 'fixtures', 'po-layout.txt');
+  it.runIf(fs.existsSync(fixture))('parses a real PURCHASE ORDER (pdftotext -layout)', () => {
+    const po = parsePo(fs.readFileSync(fixture, 'utf8'));
+    expect(po.number).toMatch(/^PO\d{6,}$/);
+    expect(po.lines.length).toBe(2);
+    expect(po.lines[1]).toMatchObject({ no: 2, qty: 2, unit: 'Box', vat: 'N', price: 2000, total: 4000 });
+    expect(po.total).toBe(5000); expect(po.grand).toBe(5000); expect(po.vatRate).toBe('0');
+    expect(po.buyer).toBeTruthy(); expect(po.issuedDate).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+  });
 });

@@ -183,12 +183,11 @@ model ShareLink {
 
 /* ───────────── order drop ───────────── */
 
-/// Public franchise upload link (/d/<token>) — no login. branches = JSON [] (empty = all)
+/// Public franchise upload link (/d/<token>) — upload only, no login, no history shown.
 model DropLink {
   id          String    @id @default(cuid())
   token       String    @unique
   name        String
-  branches    String    @default("[]")
   active      Boolean   @default(true)
   createdById String?
   createdBy   String?
@@ -197,37 +196,85 @@ model DropLink {
   drops       Drop[]
 }
 
+/// One drop per routing group of a PO (a PO whose lines go to several suppliers is split).
 model Drop {
-  id           String    @id @default(cuid())
-  ref          String    @unique // OD-YYYYMMDD-NNNN
-  linkId       String?
-  link         DropLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
-  sourceName   String    @default("") // link / legacy account name at submit time
-  branchCode   String
-  branchName   String
-  issuerName   String
-  item         String // supplier group key (sp004…)
-  itemLegacy   String?
-  fileName     String
-  size         Int
-  sha256       String
-  emailStatus  String    @default("queued") // queued | sending | sent | dry-run | failed
-  emailTo      String    @default("[]")
-  emailCc      String    @default("[]")
-  emailAttempts Int      @default(0)
-  emailSentAt  DateTime?
-  emailError   String    @default("")
-  ip           String?
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  ref           String    @unique // OD-YYYYMMDD-NNNN
+  linkId        String?
+  link          DropLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  sourceName    String    @default("") // link / legacy account name at submit time
+  branchCode    String    @default("")
+  branchName    String // PO "BUYER / SHIP TO"
+  issuerName    String
+  item          String // ItemType.key
+  itemLegacy    String?
+  fileName      String
+  size          Int
+  sha256        String
+  po            String? // JSON PoData (null for pre-PO drops)
+  poNumber      String    @default("")
+  route         String? // JSON {kind:'supplier',supplierId,supplierName,to,cc,chosenBy?,chosenAt?} | {kind:'pending',code,options}
+  emailStatus   String    @default("queued") // queued | sending | sent | dry-run | failed | pending
+  emailTo       String    @default("[]")
+  emailCc       String    @default("[]")
+  emailAttempts Int       @default(0)
+  emailSentAt   DateTime?
+  emailError    String    @default("")
+  notifiedAt    DateTime?
+  notifyError   String    @default("")
+  ip            String?
+  createdAt     DateTime  @default(now())
 
   @@index([createdAt])
+  @@index([emailStatus])
 }
 
-/// Email recipients per supplier group (catalog itself lives in code: src/lib/drop-catalog.ts)
-model ItemRoute {
-  key String @id
-  to  String @default("[]")
-  cc  String @default("[]")
+/// Item types (fallback routing by ingredient name). key 'other' = catch-all, may have no recipients.
+model ItemType {
+  key     String @id
+  label   String
+  labelTh String @default("")
+  to      String @default("[]")
+  cc      String @default("[]")
+  sort    Int    @default(0)
+}
+
+/// Central supplier directory — edit emails once, applies to every product code that uses it.
+model Supplier {
+  id        String            @id @default(cuid())
+  name      String
+  nameKey   String            @unique // normalised name
+  to        String            @default("[]")
+  cc        String            @default("[]")
+  createdAt DateTime          @default(now())
+  products  ProductSupplier[]
+}
+
+/// Product code (from PO / Business Central / manual) → suppliers. 1 supplier = auto-send, >1 = SCM chooses.
+model Product {
+  code      String            @id
+  name      String            @default("")
+  source    String            @default("po") // po | bc | manual
+  seen      Boolean           @default(false) // appeared in a PO
+  bc        Boolean           @default(false)
+  blocked   Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  suppliers ProductSupplier[]
+}
+
+model ProductSupplier {
+  productCode String
+  product     Product  @relation(fields: [productCode], references: [code], onDelete: Cascade)
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@id([productCode, supplierId])
+}
+
+/// Small JSON settings: dropScm {scmEmails[], reminderHours}, bc {lastSyncAt,count,company,error,failedAt}
+model Setting {
+  key   String @id
+  value String
 }
 
 model Counter {

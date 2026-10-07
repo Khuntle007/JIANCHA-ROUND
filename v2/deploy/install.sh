@@ -9,6 +9,7 @@ APP=$ROOT/app
 ENVF=$ROOT/.env
 
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>18||(a===18&&b>=18)?0:1)' || { echo "Node >= 18.18 required"; exit 1; }
+command -v pdftotext >/dev/null || { apt-get install -y -qq poppler-utils >/dev/null; command -v pdftotext >/dev/null || { echo "pdftotext (poppler-utils) required"; exit 1; }; }
 if ss -ltn | grep -q '127.0.0.1:8094 ' && ! systemctl is-active --quiet jc-round-web; then echo "port 8094 busy"; exit 1; fi
 
 install -d -m 755 $ROOT $APP
@@ -25,9 +26,9 @@ if [ ! -f "$ENVF" ]; then
     echo 'MAIL_SENDER="Noreply@jianchatea.com"'
     echo 'MAX_PDF_BYTES=15728640'
     # reuse the Graph credentials already configured for v1 Order Drop (never printed)
-    [ -f /opt/jc-round-drop/.env ] && grep -E '^GRAPH_(TENANT_ID|CLIENT_ID|CLIENT_SECRET)=' /opt/jc-round-drop/.env || true
+    [ -f /opt/jc-round-drop/.env ] && grep -E '^(GRAPH_(TENANT_ID|CLIENT_ID|CLIENT_SECRET)|BC_[A-Z_]+)=' /opt/jc-round-drop/.env || true
   } > "$ENVF"
-  echo ">> created $ENVF ($(grep -c '^GRAPH_' "$ENVF") GRAPH_* lines copied)"
+  echo ">> created $ENVF ($(grep -c '^GRAPH_' "$ENVF") GRAPH_* / $(grep -c '^BC_' "$ENVF") BC_* lines copied)"
 fi
 
 cd "$APP"
