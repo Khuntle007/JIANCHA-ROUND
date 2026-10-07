@@ -79,6 +79,18 @@ input,select,textarea{font-family:var(--jc-font-thai);font-size:14px}
 .pside a.on{border-left-color:var(--jc-gold);background:#fff;color:var(--jc-ink);font-weight:700}
 .pmain{flex:1;min-width:0}
 @media(max-width:720px){.pside-layout{flex-direction:column;gap:.6rem}.pside{width:100%;position:static;flex-direction:row;overflow:auto}.pside a{border-left:0;border-bottom:3px solid transparent;white-space:nowrap}.pside a.on{border-bottom-color:var(--jc-gold)}}
+.msel{position:relative;min-width:190px}
+.msel-btn{width:100%;text-align:left;padding:.55em .7em;border:1px solid var(--jc-border);border-radius:var(--radius);background:#fff;cursor:pointer;display:flex;justify-content:space-between;gap:.5rem;font:inherit;color:var(--jc-ink)}
+.msel-btn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msel-btn .ph{color:#777}
+.msel-panel{position:absolute;z-index:40;left:0;min-width:100%;width:max-content;max-width:340px;top:100%;margin-top:2px;background:#fff;border:1px solid var(--jc-border);box-shadow:0 6px 18px rgba(0,0,0,.14);display:none}
+.msel.open .msel-panel{display:block}
+.msel-panel input[type=search]{width:calc(100% - 1rem);margin:.5rem;padding:.45em .6em;border:1px solid var(--jc-border);border-radius:var(--radius)}
+.msel-list{max-height:260px;overflow:auto}
+.msel-list label{display:flex;gap:.5rem;align-items:center;padding:.4rem .7rem;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.9rem;color:var(--jc-ink);font-family:inherit}
+.msel-list label:hover{background:#faf9f6}
+.msel-tools{display:flex;justify-content:space-between;gap:1rem;padding:.1rem .7rem .4rem;font-size:.78rem}
+.msel-tools a{color:var(--jc-stone);cursor:pointer;text-decoration:underline}
 .rptbar{display:flex;flex-wrap:wrap;gap:.6rem .8rem;align-items:flex-end;margin-bottom:.9rem}
 .rptbar .field{margin:0}
 .rptsum{display:flex;gap:1.6rem;flex-wrap:wrap;margin-bottom:.8rem}
@@ -1422,6 +1434,7 @@ function emailChip(e){e=e||{};
   if(e.status==='sent')return `<span class="estat sent" title="${esc((e.to||[]).join(', '))}">ส่งอีเมลแล้ว</span>`;
   if(e.status==='dry-run')return `<span class="estat wait" title="โหมดทดสอบ — ยังไม่ได้ส่งจริง">ทดสอบ (ไม่ส่งจริง)</span>`;
   if(e.status==='failed')return `<span class="estat failed" title="${esc(e.error||'')}">ส่งไม่สำเร็จ</span>`;
+  if(e.status==='pending')return `<span class="estat wait" title="มีหลาย supplier — รอ SCM เลือกก่อนส่ง">รอ SCM เลือก supplier</span>`;
   return `<span class="estat wait">กำลังส่ง…</span>`;
 }
 async function dropFetch(path,opt,token){opt=opt||{};
@@ -1463,7 +1476,8 @@ function renderDrops(main,u){
 }
 function drawDrops(u){
   const d=DROP_VIEW.data, V=DROP_VIEW, body=$('#dropBody'); if(!body)return;
-  const tabs=[['drops',`ใบสั่งที่ได้รับ (${d.drops.length})`],['accounts',`บัญชีแฟรนไชส์ (${d.accounts.length})`],['report','รายงาน PO'],['routing','ผู้รับอีเมล']];
+  const npend=d.drops.filter(x=>x.email&&x.email.status==='pending').length;
+  const tabs=[['drops',`ใบสั่งที่ได้รับ (${d.drops.length})`],['pending',`รอเลือก supplier${npend?' ('+npend+')':''}`],['accounts',`บัญชีแฟรนไชส์ (${d.accounts.length})`],['report','รายงาน PO'],['products','สินค้า & Supplier'],['routing','ผู้รับอีเมล']];
   body.innerHTML=`
     <div class="card" style="margin-bottom:1rem"><div class="kicker" style="margin-bottom:.4rem">ลิงก์ Portal สำหรับแฟรนไชส์</div>
       <div class="linkbox"><code>${esc(d.portalUrl)}</code><button class="btn sm" id="cpPortal">คัดลอกลิงก์</button><a class="btn sm ghost" href="${esc(d.portalUrl)}" target="_blank" rel="noopener">เปิด</a></div>
@@ -1473,7 +1487,7 @@ function drawDrops(u){
   $('#cpPortal').onclick=()=>copyText(d.portalUrl);
   $$('[data-tab]').forEach(b=>b.onclick=()=>{V.tab=b.dataset.tab;drawDrops(u)});
   const tab=$('#dropTab');
-  if(V.tab==='drops')drawDropList(tab,u); else if(V.tab==='accounts')drawAccounts(tab,u); else if(V.tab==='report'){RPT.data=null;RPT.busy=false;renderReport(tab,{admin:true,fetch:qs=>dropFetch('/admin/report?'+qs,{},S.dropToken)})} else drawRouting(tab,u);
+  if(V.tab==='drops')drawDropList(tab,u); else if(V.tab==='pending')drawPending(tab,u); else if(V.tab==='products')drawProducts(tab,u); else if(V.tab==='accounts')drawAccounts(tab,u); else if(V.tab==='report'){RPT.data=null;RPT.busy=false;renderReport(tab,{admin:true,filePath:id=>'/admin/drops/'+id+'/file',token:()=>S.dropToken,fetch:qs=>dropFetch('/admin/report?'+qs,{},S.dropToken)})} else drawRouting(tab,u);
 }
 function drawDropList(tab,u){
   const d=DROP_VIEW.data, V=DROP_VIEW;
@@ -1512,7 +1526,7 @@ function drawAccounts(tab,u){
       <thead><tr><th>ชื่อ</th><th>ID (Username)</th><th>สาขาที่ส่งได้</th><th>ล็อกอินล่าสุด</th><th>สถานะ</th><th></th></tr></thead>
       <tbody>${d.accounts.length?d.accounts.map(a=>`<tr style="${a.active?'':'opacity:.5'}">
         <td class="th"><b>${esc(a.name)}</b><div class="small muted">สร้างโดย ${esc(a.createdBy||'—')} · ${fmtDT(a.createdAt)}</div></td>
-        <td><code>${esc(a.username)}</code></td>
+        <td><code>${esc(a.username)}</code>${a.portalAdmin?' <span class="estat sent">แอดมิน Portal</span>':a.reportAccess?' <span class="chip">ดูรายงาน</span>':''}</td>
         <td class="small th">${a.branches.length?a.branches.map(c=>`<span class="chip">${esc(branchLabel(c))}</span>`).join(''):'<span class="muted">ทุกสาขา</span>'}</td>
         <td class="small">${fmtDT(a.lastLoginAt)}</td>
         <td>${a.active?'<span class="estat sent">ใช้งาน</span>':'<span class="estat failed">ปิด</span>'}</td>
@@ -1535,6 +1549,8 @@ function accountModal(a,u){
       <div class="field"><label>ID (Username)</label>${isNew?`<input id="a_user" placeholder="เว้นว่าง = สร้างอัตโนมัติ">`:`<div style="padding:.5rem 0"><code>${esc(a.username)}</code></div>`}</div>
     </div>
     ${isNew?'':`<div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="a_active" ${a.active?'checked':''}> เปิดใช้งานบัญชีนี้</label></div>`}
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="a_admin" ${a&&a.portalAdmin?'checked':''}> เป็นแอดมิน Portal (จัดการสิทธิ์ผู้ใช้อื่น และเข้ารายงานได้เสมอ)</label></div>
+    <div class="field"><label style="display:flex;gap:.5rem;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="a_rpt" ${a&&a.reportAccess?'checked':''}> เข้าหน้ารายงาน PO ได้</label></div>
     <div class="field"><label>สาขาที่บัญชีนี้ส่งใบสั่งได้ <span class="muted" style="text-transform:none;letter-spacing:0">(ไม่เลือก = ทุกสาขา)</span></label>
       <input id="a_bq" placeholder="ค้นหาสาขา…" style="margin-bottom:.4rem">
       <div class="scopebox" id="a_brs">${brs.map(b=>`<label data-bn="${esc((b.code+' '+b.nameEn+' '+(b.nameTh||'')).toLowerCase())}"><input type="checkbox" class="a_br" value="${esc(b.code)}" ${sel.has(b.code)?'checked':''}> ${esc(b.nameEn)} <span class="muted small">${esc(b.code)}</span></label>`).join('')}</div></div>
@@ -1545,8 +1561,8 @@ function accountModal(a,u){
     const name=$('#a_name').value.trim(); if(!name){toast('กรอกชื่อบัญชี');return}
     const branches=$$('.a_br:checked').map(c=>c.value);
     const btn=$('#a_save'); btn.disabled=true;
-    const req=isNew?dropFetch('/admin/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,username:$('#a_user').value.trim(),branches})},S.dropToken)
-                   :dropFetch('/admin/accounts/'+a.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,branches,active:$('#a_active').checked})},S.dropToken);
+    const req=isNew?dropFetch('/admin/accounts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,username:$('#a_user').value.trim(),branches,portalAdmin:$('#a_admin').checked,reportAccess:$('#a_rpt').checked})},S.dropToken)
+                   :dropFetch('/admin/accounts/'+a.id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,branches,active:$('#a_active').checked,portalAdmin:$('#a_admin').checked,reportAccess:$('#a_rpt').checked})},S.dropToken);
     req.then(j=>{const L=DROP_VIEW.data.accounts,i=L.findIndex(x=>x.id===j.account.id);if(i<0)L.push(j.account);else L[i]=j.account;
       if(isNew)credModal(j.account,j.password,'สร้างบัญชีแล้ว'); else {closeModal();drawDrops(u);toast('บันทึกแล้ว')}})
       .catch(e=>{btn.disabled=false;toast(e.message)});
@@ -1595,8 +1611,8 @@ let PORTAL={tok:null,me:null,drops:[],file:null,busy:false};
 function portalLoad(){try{PORTAL.tok=JSON.parse(localStorage.getItem(PORTAL_KEY)||'{}').token||null}catch(e){PORTAL.tok=null}}
 function portalSave(t){PORTAL.tok=t;try{t?localStorage.setItem(PORTAL_KEY,JSON.stringify({token:t})):localStorage.removeItem(PORTAL_KEY)}catch(e){}}
 function portalShell(inner,who,page){
-  const wide=page==='report';
-  const body=who?`<div class="pside-layout"><nav class="pside"><a href="#/drop" class="${page==='report'?'':'on'}">ส่งใบสั่ง</a><a href="#/drop/report" class="${page==='report'?'on':''}">รายงาน PO</a></nav><div class="pmain" style="${wide?'':'max-width:820px'}">${inner}</div></div>`:inner;
+  const wide=page==='report'||page==='access';
+  const body=who?`<div class="pside-layout"><nav class="pside"><a href="#/drop" class="${page?'':'on'}">ส่งใบสั่ง</a>${PORTAL.me&&PORTAL.me.account.reportAccess?`<a href="#/drop/report" class="${page==='report'?'on':''}">รายงาน PO</a>`:''}${PORTAL.me&&PORTAL.me.account.portalAdmin?`<a href="#/drop/access" class="${page==='access'?'on':''}">จัดการสิทธิ์</a>`:''}</nav><div class="pmain" style="${wide?'':'max-width:820px'}">${inner}</div></div>`:inner;
   return `
   <div class="topbar"><div class="brand">${emblemSVG()}<div class="wm">JIANCHA<small>ORDER DROP · FRANCHISE</small></div></div><div class="spacer"></div>
     ${who?`<div class="who"><span class="th">${esc(who)}</span><button class="btn sm ghost" id="pOut">ออกจากระบบ</button></div>`:''}</div>
@@ -1628,7 +1644,9 @@ function renderPortalLogin(){
 }
 function drawPortal(){
   const me=PORTAL.me, P=PORTAL;
-  if(parseHash().parts[1]==='report')return drawPortalReport();
+  const pg=parseHash().parts[1];
+  if(pg==='report'&&me.account.reportAccess)return drawPortalReport();
+  if(pg==='access'&&me.account.portalAdmin)return drawPortalAccess();
   $('#app').innerHTML=portalShell(`
     <div class="pagehead"><div><div class="kicker">Order Drop</div><h1 class="th">ส่งใบสั่งซื้อ</h1></div></div>
     <form class="card" id="pForm">
@@ -1639,9 +1657,9 @@ function drawPortal(){
       <div class="row" style="justify-content:flex-end"><button class="btn gold" id="fGo">ส่งใบสั่ง</button></div>
     </form>
     <div style="height:1.2rem"></div>
-    <div class="kicker" style="margin-bottom:.5rem">ใบสั่งที่ส่งแล้ว</div>
-    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา (จาก PO)</th><th>รายการ</th><th>ผู้สั่ง</th><th>สถานะ</th></tr></thead>
-      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b>${x.poNumber?`<div class="small muted">${esc(x.poNumber)}</div>`:''}</td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td><td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
+    <div class="kicker" style="margin-bottom:.5rem">ใบสั่งที่ส่งแล้ว${me.account.portalAdmin?' (ทุกบัญชี)':''}</div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>วันที่</th><th>Ref</th><th>สาขา (จาก PO)</th><th>รายการ</th><th>ผู้สั่ง</th>${me.account.portalAdmin?'<th>บัญชี</th>':''}<th>สถานะ</th></tr></thead>
+      <tbody>${P.drops.length?P.drops.map(x=>`<tr><td class="small" style="white-space:nowrap">${fmtDT(x.createdAt)}</td><td><b>${esc(x.ref)}</b>${x.poNumber?`<div class="small muted">${esc(x.poNumber)}</div>`:''}</td><td class="th">${esc(x.branchName)}</td><td>${esc(x.itemLabel)}</td><td class="th">${esc(x.issuerName)}</td>${me.account.portalAdmin?`<td class="small">${esc(x.accountName||x.username)}</td>`:''}<td>${x.email&&x.email.status==='failed'?'<span class="estat wait">ได้รับแล้ว · รอทีมส่งต่อ</span>':'<span class="estat sent">ได้รับแล้ว</span>'}</td></tr>`).join(''):`<tr><td colspan="6"><div class="empty th">ยังไม่มีใบสั่ง</div></td></tr>`}</tbody></table></div></div>`,
     me.account.name+' · '+me.account.username);
   $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};renderPortal()};
   const z=$('#fZ'), f=$('#fF');
@@ -1673,8 +1691,136 @@ function drawPortal(){
 }
 
 
+/* ---------- pending supplier choice + products/suppliers (back office) ---------- */
+function drawPending(tab,u){
+  const d=DROP_VIEW.data, list=d.drops.filter(x=>x.email&&x.email.status==='pending');
+  if(!list.length){tab.innerHTML='<div class="card"><div class="empty th">ไม่มีรายการรอเลือก supplier</div></div>';return}
+  tab.innerHTML=`<div class="small muted th" style="margin-bottom:.8rem">รายการสินค้าที่มี supplier หลายเจ้า ระบบยังไม่ได้ส่งอีเมล เลือก supplier แล้วระบบจะส่งใบสั่งให้ทันที</div>`+list.map(x=>`<div class="card" style="margin-bottom:1rem">
+    <div class="row" style="justify-content:space-between;align-items:flex-start"><div><b>${esc(x.poNumber||x.ref)}</b> <span class="muted small">${esc(x.ref)} · ${fmtDT(x.createdAt)}</span>
+      <div class="th small">${esc(x.branchName)} · ผู้ออก ${esc(x.issuerName)}</div></div><a href="#" data-pdf="${x.id}" class="small">เปิดไฟล์ PO</a></div>
+    <div class="tblwrap" style="margin:.6rem 0"><table class="rpt"><thead><tr><th>รายการสินค้า</th><th class="num">จำนวน</th><th>หน่วย</th></tr></thead><tbody>${(x.lines||[]).map(l=>`<tr><td class="th">${esc(l.name)}</td><td class="num">${esc(l.qty)}</td><td>${esc(l.unit)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="kicker" style="margin-bottom:.4rem">เลือก supplier</div>
+    <div class="row" style="flex-wrap:wrap;gap:.5rem">${x.options.map(o=>`<button class="btn" data-ch="${x.id}" data-sid="${esc(o.id)}" style="text-align:left"><b>${esc(o.name)}</b><div class="small" style="font-weight:400;text-transform:none;letter-spacing:0">${esc(o.to.join(', '))}</div></button>`).join('')}</div></div>`).join('');
+  $$('[data-pdf]').forEach(a=>a.onclick=e=>{e.preventDefault();openPdf('/admin/drops/'+a.dataset.pdf+'/file',S.dropToken)});
+  $$('[data-ch]').forEach(b=>b.onclick=()=>{
+    const x=list.find(y=>y.id===b.dataset.ch), o=x.options.find(z=>z.id===b.dataset.sid);
+    confirmDialog(`ส่งใบสั่ง ${x.poNumber||x.ref} ให้ ${o.name} (${o.to.join(', ')})?`,()=>{
+      dropFetch('/admin/drops/'+x.id+'/choose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({supplierId:o.id})},S.dropToken)
+        .then(j=>{const i=d.drops.findIndex(y=>y.id===x.id);d.drops[i]=j.drop;drawDrops(u);toast(j.drop.email.status==='failed'?'ส่งไม่สำเร็จ: '+(j.drop.email.error||''):'ส่งอีเมลให้ '+o.name+' แล้ว')}).catch(e=>toast(e.message))},{yes:'ส่งเลย'});
+  });
+}
+let PROD={q:'',data:null,view:'products',sup:null};
+const prodNav=()=>`<div class="tabs" style="margin-bottom:1rem"><button data-pv="products" class="${PROD.view==='products'?'on':''}">สินค้า</button><button data-pv="suppliers" class="${PROD.view==='suppliers'?'on':''}">สมุดรายชื่อ supplier</button></div>`;
+const bindProdNav=(tab,u)=>$$('[data-pv]').forEach(b=>b.onclick=()=>{PROD.view=b.dataset.pv;PROD.data=null;drawProducts(tab,u)});
+function drawProducts(tab,u){
+  const d=DROP_VIEW.data, st=d.settings||{scmEmails:[],reminderHours:0}, bc=d.bc||{};
+  if(PROD.view==='suppliers')return drawSuppliers(tab,u);
+  const load=()=>dropFetch('/admin/products?q='+encodeURIComponent(PROD.q),{},S.dropToken).then(j=>{PROD.data=j;drawProducts(tab,u)}).catch(e=>toast(e.message));
+  if(!PROD.data){tab.innerHTML='<div class="card"><div class="empty th">กำลังโหลด…</div></div>';load();return}
+  const pd=PROD.data;
+  tab.innerHTML=prodNav()+`<div class="grid2" style="margin-bottom:1rem">
+    <div class="card"><div class="kicker" style="margin-bottom:.5rem">แจ้งเตือนทีม SCM (เมื่อมีรายการรอเลือก supplier)</div>
+      <div class="field"><label>อีเมลทีม SCM (คั่นด้วย , )</label><input id="s_mail" value="${esc((st.scmEmails||[]).join(', '))}" placeholder="xxx@gmail.com"></div>
+      <div class="field"><label>เตือนซ้ำทุก (ชั่วโมง) — 0 = แจ้งครั้งเดียว</label><input id="s_rem" type="number" min="0" max="720" value="${esc(st.reminderHours||0)}" style="max-width:140px"></div>
+      <button class="btn gold" id="s_save">บันทึก</button></div>
+    <div class="card"><div class="kicker" style="margin-bottom:.5rem">Dynamics 365 Business Central</div>
+      <div class="th small" style="margin-bottom:.6rem">${bc.configured?(bc.lastSyncAt?`ซิงก์ล่าสุด ${fmtDT(bc.lastSyncAt)} · ${esc(bc.count)} รายการ · ${esc(bc.company||'')}`:'ยังไม่เคยซิงก์'):'<span style="color:var(--bad)">ยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์</span> (BC_TENANT_ID / BC_CLIENT_ID / BC_CLIENT_SECRET / BC_COMPANY ในไฟล์ .env)'}${bc.error?`<div style="color:var(--bad);margin-top:.3rem">ผิดพลาด: ${esc(bc.error)}</div>`:''}</div>
+      <button class="btn" id="bc_sync" ${bc.configured?'':'disabled'}>ซิงก์รหัส/ชื่อสินค้าจาก Business Central</button>
+      <div class="small muted th" style="margin-top:.5rem">ดึง No. และ Description ของสินค้า ระบบซิงก์เองวันละครั้งด้วย</div></div></div>
+    <div class="row" style="margin-bottom:.7rem;gap:.6rem"><div class="field" style="flex:1;min-width:220px;margin:0"><input id="p_q" placeholder="ค้นหารหัส / ชื่อสินค้า (ค้นทั้ง Business Central)…" value="${esc(PROD.q)}"></div>
+      <button class="btn gold" id="p_go">ค้นหา</button><button class="btn ghost" id="p_new">+ เพิ่มรหัสสินค้าเอง</button></div>
+    <div class="small muted th" style="margin-bottom:.4rem">${PROD.q?`พบ ${pd.total} รายการ (แสดง ${pd.products.length})`:`แสดงสินค้าที่ตั้ง supplier แล้ว หรือเคยอยู่ใน PO · ทั้งหมดในระบบ ${pd.all} รายการ — พิมพ์ค้นหาเพื่อตั้งค่าสินค้าอื่น`}</div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>Supplier</th><th>การส่ง</th><th></th></tr></thead><tbody>${pd.products.length?pd.products.map(p=>`<tr>
+      <td><b>${esc(p.code)}</b></td><td class="th">${esc(p.name)}${p.blocked?' <span class="muted small">(blocked)</span>':''}</td>
+      <td class="small th">${p.suppliers.length?p.suppliers.map(x=>`<span class="chip" title="${esc(x.to.join(', '))}">${esc(x.name)}</span>`).join(''):'<span class="muted">—</span>'}</td>
+      <td class="small th">${p.suppliers.length===0?'<span class="muted">ยังไม่ตั้งค่า (ใช้กฎตามประเภทสินค้า)</span>':p.suppliers.length===1?'<span class="estat sent">ส่งอัตโนมัติ</span>':'<span class="estat wait">รอ SCM เลือก</span>'}</td>
+      <td><button class="btn sm ghost" data-ep="${esc(p.code)}">ตั้งค่า supplier</button></td></tr>`).join(''):'<tr><td colspan="5"><div class="empty th">ไม่พบสินค้า</div></td></tr>'}</tbody></table></div></div>`;
+  bindProdNav(tab,u);
+  $('#s_save').onclick=()=>{
+    const scmEmails=$('#s_mail').value.split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+    dropFetch('/admin/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scmEmails,reminderHours:+$('#s_rem').value||0})},S.dropToken)
+      .then(j=>{d.settings=j.settings;toast('บันทึกแล้ว')}).catch(e=>toast(e.message))};
+  $('#bc_sync').onclick=function(){this.disabled=true;this.textContent='กำลังซิงก์…';
+    dropFetch('/admin/bc/sync',{method:'POST'},S.dropToken).then(j=>{d.bc=j.bc;PROD.data=null;toast('ซิงก์แล้ว '+j.bc.count+' รายการ');drawProducts(tab,u)})
+      .catch(e=>{d.bc={...d.bc,error:e.message};toast(e.message);drawProducts(tab,u)})};
+  const go=()=>{PROD.q=$('#p_q').value.trim();PROD.data=null;drawProducts(tab,u)};
+  $('#p_go').onclick=go; $('#p_q').onkeydown=e=>{if(e.key==='Enter')go()};
+  $('#p_new').onclick=()=>productModal({code:'',name:'',suppliers:[]},true,tab,u);
+  $$('[data-ep]').forEach(b=>b.onclick=()=>productModal(pd.products.find(p=>p.code===b.dataset.ep),false,tab,u));
+}
+function drawSuppliers(tab,u){
+  const load=()=>dropFetch('/admin/suppliers',{},S.dropToken).then(j=>{PROD.sup=j.suppliers;drawSuppliers(tab,u)}).catch(e=>toast(e.message));
+  if(!PROD.sup){tab.innerHTML=prodNav()+'<div class="card"><div class="empty th">กำลังโหลด…</div></div>';bindProdNav(tab,u);load();return}
+  const L=PROD.sup;
+  tab.innerHTML=prodNav()+`<div class="row" style="justify-content:space-between;margin-bottom:.7rem"><div class="small muted th">แก้อีเมลของ supplier ที่นี่ครั้งเดียว มีผลกับทุกรหัสสินค้าที่ใช้ supplier นี้</div><button class="btn gold" id="sp_new">+ เพิ่ม supplier</button></div>
+    <div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>ชื่อ supplier</th><th>ส่งถึง (To)</th><th>สำเนา (CC)</th><th>ใช้ใน</th><th></th></tr></thead><tbody>${L.length?L.map(x=>`<tr>
+      <td class="th"><b>${esc(x.name)}</b></td><td class="small">${esc(x.to.join(', '))}</td><td class="small">${esc((x.cc||[]).join(', '))||'<span class="muted">—</span>'}</td>
+      <td class="small">${x.products} รหัสสินค้า</td>
+      <td style="white-space:nowrap"><button class="btn sm ghost" data-es="${esc(x.id)}">แก้</button> <button class="btn sm ghost" data-ds="${esc(x.id)}">ลบ</button></td></tr>`).join(''):'<tr><td colspan="5"><div class="empty th">ยังไม่มี supplier — กด “+ เพิ่ม supplier”</div></td></tr>'}</tbody></table></div></div>`;
+  bindProdNav(tab,u);
+  $('#sp_new').onclick=()=>supplierModal(null,()=>{PROD.sup=null;drawSuppliers(tab,u)});
+  $$('[data-es]').forEach(b=>b.onclick=()=>supplierModal(L.find(x=>x.id===b.dataset.es),()=>{PROD.sup=null;PROD.data=null;drawSuppliers(tab,u)}));
+  $$('[data-ds]').forEach(b=>b.onclick=()=>{const x=L.find(y=>y.id===b.dataset.ds);
+    confirmDialog(x.products?`ลบ ${x.name}? ใช้อยู่ใน ${x.products} รหัสสินค้า จะถูกเอาออกจากรหัสเหล่านั้นด้วย`:`ลบ ${x.name}?`,()=>
+      dropFetch('/admin/suppliers/'+x.id+'?force=1',{method:'DELETE'},S.dropToken).then(()=>{PROD.sup=null;PROD.data=null;drawSuppliers(tab,u);toast('ลบแล้ว')}).catch(e=>toast(e.message)),{danger:true,yes:'ลบ'})});
+}
+function supplierModal(x,done){
+  const isNew=!x, split=v=>v.split(/[,;\s]+/).map(t=>t.trim()).filter(Boolean);
+  openModal(`<div class="modal" style="max-width:520px"><button class="x" onclick="closeModal()">×</button><h2>${isNew?'เพิ่ม supplier':'แก้ supplier'}</h2>
+    <div class="field"><label>ชื่อ supplier</label><input id="sm_name" maxlength="80" value="${esc(x?x.name:'')}"></div>
+    <div class="field"><label>ส่งถึง (To) — หลายอีเมลคั่นด้วย ,</label><input id="sm_to" value="${esc(x?x.to.join(', '):'')}" placeholder="a@jianchatea.com, b@jianchatea.com"></div>
+    <div class="field"><label>สำเนา (CC) — ไม่บังคับ</label><input id="sm_cc" value="${esc(x?(x.cc||[]).join(', '):'')}"></div>
+    ${!isNew&&x.products?`<div class="small muted th">การแก้ไขมีผลกับ ${x.products} รหัสสินค้าที่ใช้ supplier นี้ และกับใบสั่งที่ส่งหลังจากนี้</div>`:''}
+    <div class="row" style="justify-content:flex-end;margin-top:.9rem"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="sm_save">บันทึก</button></div></div>`);
+  $('#sm_save').onclick=()=>{const body={name:$('#sm_name').value.trim(),to:split($('#sm_to').value),cc:split($('#sm_cc').value)};
+    dropFetch('/admin/suppliers'+(isNew?'':'/'+x.id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},S.dropToken)
+      .then(j=>{closeModal();toast('บันทึกแล้ว');done(j.supplier)}).catch(e=>toast(e.message))};
+}
+function productModal(p,isNew,tab,u,preset){
+  const sel=new Set(preset||p.suppliers.map(x=>x.id));
+  const go=()=>{
+    if(!PROD.sup){dropFetch('/admin/suppliers',{},S.dropToken).then(j=>{PROD.sup=j.suppliers;go()}).catch(e=>toast(e.message));return}
+    const L=PROD.sup;
+    openModal(`<div class="modal" style="max-width:600px"><button class="x" onclick="closeModal()">×</button>
+      <h2>${isNew?'เพิ่มรหัสสินค้า':'Supplier ของสินค้า'}</h2>
+      ${isNew?`<div class="grid2"><div class="field"><label>รหัสสินค้า</label><input id="pm_code" placeholder="เช่น 030013"></div><div class="field"><label>ชื่อ</label><input id="pm_name"></div></div>`:`<div class="th" style="margin:.3rem 0 .8rem"><b>${esc(p.code)}</b> · ${esc(p.name)}</div>`}
+      <div class="small muted th" style="margin-bottom:.6rem">ติ๊กเลือก supplier ที่ขายสินค้านี้ · 1 เจ้า = ส่งอัตโนมัติ · มากกว่า 1 เจ้า = ระบบไม่ส่งเอง รอ SCM เลือกทุกครั้ง · ไม่เลือกเลย = ใช้กฎตามประเภทสินค้า</div>
+      <input id="pm_q" placeholder="ค้นหา supplier…" style="margin-bottom:.4rem;width:100%">
+      <div class="scopebox" id="pm_list" style="max-height:260px;overflow:auto">${L.length?L.map(x=>`<label data-n="${esc((x.name+' '+x.to.join(' ')).toLowerCase())}"><input type="checkbox" value="${esc(x.id)}" ${sel.has(x.id)?'checked':''}> <b>${esc(x.name)}</b> <span class="muted small">${esc(x.to.join(', '))}</span></label>`).join(''):'<div class="empty th small">ยังไม่มี supplier ในสมุดรายชื่อ — กด “+ supplier ใหม่”</div>'}</div>
+      <div style="margin-top:.6rem"><button class="btn sm ghost" id="pm_new">+ supplier ใหม่</button></div>
+      <div class="row" style="justify-content:flex-end;margin-top:.9rem"><button class="btn ghost" onclick="closeModal()">ยกเลิก</button><button class="btn gold" id="pm_save">บันทึก</button></div></div>`);
+    $('#pm_q').oninput=e=>{const q=e.target.value.toLowerCase();$$('#pm_list label').forEach(l=>l.style.display=(l.dataset.n||'').includes(q)?'':'none')};
+    $('#pm_list').onchange=e=>{e.target.checked?sel.add(e.target.value):sel.delete(e.target.value)};
+    $('#pm_new').onclick=()=>supplierModal(null,n=>{PROD.sup=null;sel.add(n.id);go()});
+    $('#pm_save').onclick=()=>{
+      const code=isNew?$('#pm_code').value.trim():p.code; if(!code){toast('ใส่รหัสสินค้า');return}
+      dropFetch('/admin/products/'+encodeURIComponent(code),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:isNew?$('#pm_name').value.trim():p.name,supplierIds:[...sel]})},S.dropToken)
+        .then(()=>{closeModal();PROD.data=null;PROD.sup=null;drawProducts(tab,u);toast('บันทึกแล้ว')}).catch(e=>toast(e.message))};
+  };
+  go();
+}
+
 /* ---------- PO report (shared by franchise portal + back office) ---------- */
-let RPT={f:{from:'',to:'',branch:'',item:'',q:'',account:''},data:null,busy:false};
+const RPT_EMPTY=()=>({from:'',to:'',branch:[],item:[],q:'',account:[]});
+let RPT={f:RPT_EMPTY(),data:null,busy:false};
+const rptQs=f=>{const u=new URLSearchParams();Object.entries(f).forEach(([k,v])=>{(Array.isArray(v)?v:[v]).forEach(x=>{if(x)u.append(k,x)})});return u.toString()};
+document.addEventListener('click',e=>{document.querySelectorAll('.msel.open').forEach(m=>{if(!m.contains(e.target))m.classList.remove('open')})});
+/* searchable multi-select dropdown: opts=[[value,label]], sel=array (mutated in place) */
+function mountMsel(el,opts,sel,ph){
+  el.innerHTML=`<button type="button" class="msel-btn"><span class="lbl"></span><span>▾</span></button>
+    <div class="msel-panel"><input type="search" placeholder="ค้นหา…" autocomplete="off"><div class="msel-tools"><a data-all>เลือกทั้งหมด</a><a data-none>ล้างที่เลือก</a></div><div class="msel-list"></div></div>`;
+  const q=el.querySelector('input'),list=el.querySelector('.msel-list'),lbl=el.querySelector('.lbl');
+  const nm=t=>String(t).toLowerCase();
+  const shown=()=>opts.filter(o=>nm(o[1]).includes(nm(q.value.trim())));
+  const label=()=>{const n=sel.length;lbl.innerHTML=n?(n<=2?esc(sel.map(v=>(opts.find(o=>o[0]===v)||[v,v])[1]).join(', ')):`เลือกแล้ว ${n} รายการ`):`<span class="ph">${ph}</span>`};
+  const draw=()=>{const r=shown();list.innerHTML=r.length?r.map(o=>`<label><input type="checkbox" value="${esc(o[0])}" ${sel.includes(o[0])?'checked':''}> <span class="th">${esc(o[1])}</span></label>`).join(''):'<div class="empty th small" style="padding:.8rem">ไม่พบรายการ</div>';label()};
+  el.querySelector('.msel-btn').onclick=()=>{el.classList.toggle('open');if(el.classList.contains('open'))q.focus()};
+  q.oninput=draw;
+  list.onchange=e=>{const v=e.target.value,i=sel.indexOf(v);if(e.target.checked){if(i<0)sel.push(v)}else if(i>=0)sel.splice(i,1);label()};
+  el.querySelector('[data-all]').onclick=()=>{shown().forEach(o=>{if(!sel.includes(o[0]))sel.push(o[0])});draw()};
+  el.querySelector('[data-none]').onclick=()=>{sel.length=0;draw()};
+  draw();
+}
 const fmtMoney=n=>n==null||n===''?'':Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 function rptDay(iso){return new Date(iso).toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'2-digit',timeZone:'Asia/Bangkok'})}
 function renderReport(el,opt){
@@ -1682,14 +1828,14 @@ function renderReport(el,opt){
   const rows=d?d.rows:[];
   const pos=new Set(rows.filter(r=>r.poNumber).map(r=>r.poNumber)).size;
   const sum=rows.reduce((x,r)=>x+(+r.total||0),0);
-  const sel=(id,label,val,opts)=>`<div class="field"><label>${label}</label><select id="${id}"><option value="">ทั้งหมด</option>${opts.map(o=>`<option value="${esc(o[0])}" ${val===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select></div>`;
+  const ms=(k,label)=>`<div class="field"><label>${label}</label><div class="msel" data-ms="${k}"></div></div>`;
   el.innerHTML=`
     <div class="card" style="margin-bottom:1rem"><div class="rptbar">
       <div class="field"><label>ตั้งแต่วันที่</label><input type="date" id="rf_from" value="${esc(f.from)}"></div>
       <div class="field"><label>ถึงวันที่</label><input type="date" id="rf_to" value="${esc(f.to)}"></div>
-      ${sel('rf_branch','สาขา (จาก PO)',f.branch,(d?d.branches:[]).map(b=>[b,b]))}
-      ${sel('rf_item','ประเภทสินค้า',f.item,(d?d.items:[]).map(i=>[i.key,i.label]))}
-      ${opt.admin?sel('rf_account','บัญชีแฟรนไชส์',f.account,(d&&d.accounts||[]).map(a=>[a.id,a.name+' ('+a.username+')'])):''}
+      ${ms('branch','สาขา (จาก PO)')}
+      ${ms('item','ประเภทสินค้า')}
+      ${opt.admin?ms('account','บัญชีแฟรนไชส์'):''}
       <div class="field"><label>ค้นหา (เลข PO / สินค้า)</label><input id="rf_q" value="${esc(f.q)}" placeholder="เช่น PO2026… หรือ Yogurt"></div>
       <div class="field"><button class="btn gold" id="rf_go">ค้นหา</button></div>
       <div class="field"><button class="btn ghost" id="rf_clear" type="button">ล้างตัวกรอง</button></div>
@@ -1697,17 +1843,24 @@ function renderReport(el,opt){
     </div>
     <div class="rptsum th"><div class="muted small">จำนวน PO</div><div class="muted small">จำนวนรายการ</div><div class="muted small">ยอดรวม (บาท)</div></div></div>
     <div class="card" style="padding:0"><div class="tblwrap"><table class="rpt"><thead><tr><th>วันที่ส่ง</th><th>PO / Ref</th><th>สาขา (จาก PO)</th><th>ประเภท</th><th>รายการสินค้า</th><th class="num">จำนวน</th><th>หน่วย</th><th class="num">ราคา</th><th class="num">รวม</th><th>ผู้ออกใบสั่ง</th>${opt.admin?'<th>บัญชี</th>':''}</tr></thead>
-    <tbody>${!d?`<tr><td colspan="11"><div class="empty th">กำลังโหลด…</div></td></tr>`:rows.length?rows.map(r=>`<tr><td class="small" style="white-space:nowrap">${rptDay(r.createdAt)}</td><td><b>${esc(r.poNumber||'—')}</b><div class="small muted">${esc(r.ref)}</div></td><td class="th">${esc(r.branch)}</td><td>${esc(r.itemLabel)}</td>
+    <tbody>${!d?`<tr><td colspan="11"><div class="empty th">กำลังโหลด…</div></td></tr>`:rows.length?rows.map(r=>`<tr><td class="small" style="white-space:nowrap">${rptDay(r.createdAt)}</td><td><a href="#" class="pdfdl" data-id="${esc(r.dropId)}" data-fn="${esc(r.fileName||r.ref+'.pdf')}" title="ดาวน์โหลดไฟล์ PO ต้นฉบับ" style="color:var(--jc-ink);text-decoration:underline"><b>${esc(r.poNumber||r.ref)}</b> ⬇</a><div class="small muted">${esc(r.ref)}</div></td><td class="th">${esc(r.branch)}</td><td>${esc(r.itemLabel)}${opt.admin&&r.supplier?`<div class="small muted">→ ${esc(r.supplier)}</div>`:''}${opt.admin&&r.pending?'<div class="small" style="color:#8a6d00">รอเลือก supplier</div>':''}</td>
       <td class="th">${r.hasDetail?esc(r.product):'<span class="muted small">ไม่มีรายละเอียด PO (ส่งก่อนระบบอ่าน PO)</span>'}</td><td class="num">${r.qty==null?'':esc(r.qty)}</td><td>${esc(r.unit)}</td><td class="num">${fmtMoney(r.price)}</td><td class="num">${fmtMoney(r.total)}</td><td class="th">${esc(r.issuer)}</td>${opt.admin?`<td class="small">${esc(r.account)}</td>`:''}</tr>`).join(''):`<tr><td colspan="11"><div class="empty th">ไม่พบข้อมูลตามตัวกรอง</div></td></tr>`}</tbody></table></div></div>
     ${d&&d.truncated?'<div class="small muted th" style="margin-top:.5rem">แสดง 5,000 รายการแรก — ใช้ตัวกรองเพื่อจำกัดข้อมูล</div>':''}`;
   // summary numbers (rendered after to keep markup simple)
   const sm=el.querySelector('.rptsum');
   sm.innerHTML=`<div><div class="muted small th">จำนวน PO</div><b>${pos}</b></div><div><div class="muted small th">จำนวนรายการสินค้า</div><b>${rows.filter(r=>r.hasDetail).length}</b></div><div><div class="muted small th">ยอดรวม (บาท)</div><b>${fmtMoney(sum)}</b></div>`;
-  const read=()=>{f.from=$('#rf_from').value;f.to=$('#rf_to').value;f.branch=$('#rf_branch').value;f.item=$('#rf_item').value;f.q=$('#rf_q').value.trim();if(opt.admin)f.account=$('#rf_account').value};
+  const read=()=>{f.from=$('#rf_from').value;f.to=$('#rf_to').value;f.q=$('#rf_q').value.trim()};
+  mountMsel(el.querySelector('[data-ms=branch]'),(d?d.branches:[]).map(b=>[b,b]),f.branch,'ทั้งหมด');
+  mountMsel(el.querySelector('[data-ms=item]'),(d?d.items:[]).map(i=>[i.key,i.label]),f.item,'ทั้งหมด');
+  if(opt.admin)mountMsel(el.querySelector('[data-ms=account]'),(d&&d.accounts||[]).map(a=>[a.id,a.name+' ('+a.username+')']),f.account,'ทั้งหมด');
   const load=()=>{read();RPT.data=null;RPT.busy=false;renderReport(el,opt)};
+  el.querySelectorAll('.pdfdl').forEach(a=>a.onclick=async e=>{e.preventDefault();
+    try{const r=await fetch(DROP_API+opt.filePath(a.dataset.id),{headers:{Authorization:'Bearer '+opt.token()}});if(!r.ok)throw 0;
+      const l=document.createElement('a');l.href=URL.createObjectURL(await r.blob());l.download=a.dataset.fn;document.body.appendChild(l);l.click();l.remove()}
+    catch(_){toast('ดาวน์โหลดไฟล์ไม่สำเร็จ')}});
   $('#rf_go').onclick=load;
   $('#rf_q').onkeydown=e=>{if(e.key==='Enter')load()};
-  $('#rf_clear').onclick=()=>{RPT.f={from:'',to:'',branch:'',item:'',q:'',account:''};load()};
+  $('#rf_clear').onclick=()=>{RPT.f=RPT_EMPTY();load()};
   $('#rf_csv').onclick=()=>{
     const head=['วันที่ส่ง','Ref','PO','สาขา (จาก PO)','ประเภท','วันที่ออก PO','ลำดับ','รายการสินค้า','จำนวน','หน่วย','VAT','ราคา','รวม','ผู้ออกใบสั่ง','บัญชี'];
     const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -1715,8 +1868,7 @@ function renderReport(el,opt){
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='po-report-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();
   };
   if(!d&&!RPT.busy){RPT.busy=true;
-    const qs=new URLSearchParams(Object.fromEntries(Object.entries(f).filter(([k,v])=>v)));
-    opt.fetch(qs.toString()).then(j=>{RPT.busy=false;RPT.data=j;renderReport(el,opt)}).catch(e=>{RPT.busy=false;if(opt.on401&&e.status===401)return opt.on401();el.innerHTML=`<div class="card"><div class="empty th">โหลดรายงานไม่ได้ <span class="small muted">(${esc(e.message)})</span></div></div>`});
+    opt.fetch(rptQs(f)).then(j=>{RPT.busy=false;RPT.data=j;renderReport(el,opt)}).catch(e=>{RPT.busy=false;if(opt.on401&&e.status===401)return opt.on401();el.innerHTML=`<div class="card"><div class="empty th">โหลดรายงานไม่ได้ <span class="small muted">(${esc(e.message)})</span></div></div>`});
   }
 }
 function drawPortalReport(){
@@ -1724,7 +1876,19 @@ function drawPortalReport(){
   $('#app').innerHTML=portalShell(`<div class="pagehead"><div><div class="kicker">Report</div><h1 class="th">รายงาน PO</h1><div class="muted th small">รายละเอียดสินค้าใน PO ที่ส่งแล้ว เลือกดูตามวันที่และสาขาได้</div></div></div><div id="rptBox"></div>`,me.account.name+' · '+me.account.username,'report');
   $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};RPT.data=null;location.hash='#/drop';renderPortal()};
   RPT.data=null;RPT.busy=false;
-  renderReport($('#rptBox'),{admin:false,fetch:qs=>dropFetch('/portal/report?'+qs,{},PORTAL.tok),on401:()=>{portalSave(null);PORTAL.me=null;renderPortal()}});
+  renderReport($('#rptBox'),{admin:false,filePath:id=>'/portal/drops/'+id+'/file',token:()=>PORTAL.tok,fetch:qs=>dropFetch('/portal/report?'+qs,{},PORTAL.tok),on401:()=>{portalSave(null);PORTAL.me=null;renderPortal()}});
+}
+
+function drawPortalAccess(){
+  const me=PORTAL.me;
+  $('#app').innerHTML=portalShell(`<div class="pagehead"><div><div class="kicker">Admin</div><h1 class="th">จัดการสิทธิ์</h1><div class="muted th small">เลือกบัญชีที่เข้าหน้า "รายงาน PO" ได้ (แอดมินเข้าได้เสมอ)</div></div></div><div id="accBox"><div class="card"><div class="empty th">กำลังโหลด…</div></div></div>`,me.account.name+' · '+me.account.username,'access');
+  $('#pOut').onclick=()=>{portalSave(null);PORTAL={tok:null,me:null,drops:[],file:null,busy:false};location.hash='#/drop';renderPortal()};
+  dropFetch('/portal/access',{},PORTAL.tok).then(j=>{
+    $('#accBox').innerHTML=`<div class="card" style="padding:0"><div class="tblwrap"><table><thead><tr><th>บัญชี</th><th>ID</th><th>สิทธิ์</th><th style="text-align:center">เข้าหน้ารายงาน PO</th></tr></thead><tbody>${j.accounts.map(a=>`<tr><td class="th"><b>${esc(a.name)}</b></td><td><code>${esc(a.username)}</code></td><td>${a.portalAdmin?'<span class="estat sent">แอดมิน</span>':'<span class="muted small">ผู้ใช้ทั่วไป</span>'}</td><td style="text-align:center"><input type="checkbox" data-acc="${esc(a.id)}" ${a.reportAccess?'checked':''} ${a.portalAdmin?'disabled':''}></td></tr>`).join('')}</tbody></table></div></div>`;
+    document.querySelectorAll('[data-acc]').forEach(c=>c.onchange=()=>{c.disabled=true;
+      dropFetch('/portal/access/'+c.dataset.acc,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reportAccess:c.checked})},PORTAL.tok)
+        .then(()=>{c.disabled=false;toast('บันทึกสิทธิ์แล้ว')}).catch(e=>{c.disabled=false;c.checked=!c.checked;toast(e.message)})});
+  }).catch(e=>{if(e.status===401){portalSave(null);PORTAL.me=null;renderPortal()}else $('#accBox').innerHTML=`<div class="card"><div class="empty th">โหลดไม่ได้ (${esc(e.message)})</div></div>`});
 }
 
 /* ---------- boot ---------- */
