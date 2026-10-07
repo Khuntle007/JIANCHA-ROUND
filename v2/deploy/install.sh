@@ -17,7 +17,7 @@ install -d -m 700 -o www-data -g www-data $ROOT/data
 rsync -a --delete --exclude node_modules --exclude .next --exclude data --exclude .env "$SRC/" "$APP/"
 
 if [ ! -f "$ENVF" ]; then
-  umask 077
+  ( umask 077
   {
     echo 'DATABASE_URL="file:/opt/jc-round-web/data/jcround.db"'
     echo 'DATA_DIR="/opt/jc-round-web/data"'
@@ -27,7 +27,7 @@ if [ ! -f "$ENVF" ]; then
     echo 'MAX_PDF_BYTES=15728640'
     # reuse the Graph credentials already configured for v1 Order Drop (never printed)
     [ -f /opt/jc-round-drop/.env ] && grep -E '^(GRAPH_(TENANT_ID|CLIENT_ID|CLIENT_SECRET)|BC_[A-Z_]+)=' /opt/jc-round-drop/.env || true
-  } > "$ENVF"
+  } > "$ENVF" )
   echo ">> created $ENVF ($(grep -c '^GRAPH_' "$ENVF") GRAPH_* / $(grep -c '^BC_' "$ENVF") BC_* lines copied)"
 fi
 
@@ -36,6 +36,7 @@ npm ci --no-audit --no-fund --loglevel=error
 set -a; . "$ENVF"; set +a
 npx prisma db push --skip-generate >/dev/null
 npm run build
+chmod -R go+rX "$APP"            # code is not secret; secrets live only in $ENVF (600)
 chown -R www-data:www-data $APP/.next $ROOT/data
 install -m 644 "$SRC/deploy/jc-round-web.service" /etc/systemd/system/jc-round-web.service
 systemctl daemon-reload
