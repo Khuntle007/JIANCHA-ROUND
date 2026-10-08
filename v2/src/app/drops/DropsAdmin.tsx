@@ -15,25 +15,26 @@ type Bc = { configured: boolean; lastSyncAt?: string; count?: number; company?: 
 const split = (v: string) => v.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
 
 
-type Tab = 'drops' | 'pending' | 'report' | 'products' | 'routing' | 'links';
+const isMaster = (l: { branchCode: string | null }) => !!l.branchCode && l.branchCode.startsWith('JC');
+type Tab = 'drops' | 'pending' | 'report' | 'products' | 'routing' | 'links' | 'master';
 
 export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: string; mailFrom: string; dryRun: boolean; drops: Drop[]; links: Link[]; items: Item[];
   settings: { scmEmails: string[]; reminderHours: number; alwaysCc: string[] }; bc: Bc; branches: { code: string; name: string }[]; routingMap: React.ReactNode }) {
   const router = useRouter();
   const pending = p.drops.filter(d => d.emailStatus === 'pending');
-  const [tab, setTab] = useState<Tab>((['drops', 'pending', 'report', 'products', 'routing', 'links'] as Tab[]).includes(p.initialTab as Tab) ? (p.initialTab as Tab) : 'drops');
+  const [tab, setTab] = useState<Tab>((['drops', 'pending', 'report', 'products', 'routing', 'links', 'master'] as Tab[]).includes(p.initialTab as Tab) ? (p.initialTab as Tab) : 'drops');
   const [editLink, setEditLink] = useState<Link | 'new' | null>(null);
   const [routing, setRouting] = useState(() => p.items.map(i => ({ key: i.key, to: i.to.join(', '), cc: i.cc.join(', '), blocked: i.blocked, subjectTag: i.subjectTag, skipGlobalCc: i.skipGlobalCc })));
   const [add, setAdd] = useState({ label: '', labelTh: '', to: '' });
   const [lq, setLq] = useState(''), [lsel, setLsel] = useState<Set<string>>(new Set());
   const { ask, node } = useConfirm();
   const linkUrl = (l: Link) => `${p.appUrl}/d/${l.token}`;
-  const tabs: [Tab, string][] = [['drops', `ใบสั่งที่ได้รับ (${p.drops.length})`], ['pending', `รอเลือก supplier (${pending.length})`], ['report', 'รายงาน PO'], ['products', 'สินค้า & Supplier'], ['routing', 'ผู้รับตามประเภท'], ['links', `ลิงก์แฟรนไชส์ (${p.links.length})`]];
+  const tabs: [Tab, string][] = [['drops', `ใบสั่งที่ได้รับ (${p.drops.length})`], ['pending', `รอเลือก supplier (${pending.length})`], ['report', 'รายงาน PO'], ['products', 'สินค้า & Supplier'], ['routing', 'ผู้รับตามประเภท'], ['links', `ลิงก์แฟรนไชส์ (${p.links.filter(l => !isMaster(l)).length})`], ['master', `ลิงก์สำหรับมาสเตอร์ (${p.links.filter(isMaster).length})`]];
 
   return (
     <>
       <div className="pagehead"><div><div className="kicker">SCM · Franchise</div><h1>External Order Drop</h1><div className="muted th small">ใบ PO (PDF) จากแฟรนไชส์ → อ่านข้อมูลจาก PDF → ส่งอีเมลถึง supplier อัตโนมัติจาก <b>{p.mailFrom}</b>{p.dryRun && <span style={{ color: 'var(--bad)' }}> · โหมดทดสอบ: ยังไม่ส่งอีเมลจริง</span>}</div></div></div>
-      <div className="tabs">{tabs.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}</div>
+      <div className="tabs">{tabs.map(([k, l]) => <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setLsel(new Set()); setLq(''); }}>{l}</button>)}</div>
 
       {tab === 'drops' && <DropsList drops={p.drops} items={p.items} isMain={p.isMain} onChoose={() => setTab('pending')} />}
 
@@ -83,10 +84,12 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
           } catch (e) { toast((e as Error).message); } }}>บันทึก</button></div>
       </>}
 
-      {tab === 'links' && <>
-        <div className="card th small" style={{ marginBottom: '.8rem', background: 'var(--warnbg)' }}>แต่ละลิงก์ใช้<b>ส่งใบ PO ได้อย่างเดียว ไม่ต้องล็อกอิน และไม่เห็นข้อมูลใด ๆ</b> — ควรสร้าง 1 ลิงก์ต่อร้าน/แฟรนไชส์ (ชื่อลิงก์จะแสดงในรายงาน) · ถ้าลิงก์หลุดให้กด “เปลี่ยนลิงก์” หรือ “ปิด”</div>
+      {(tab === 'links' || tab === 'master') && <>
+        <div className="card th small" style={{ marginBottom: '.8rem', background: 'var(--warnbg)' }}>{tab === 'master'
+          ? <>ลิงก์สำหรับ<b>สาขามาสเตอร์ (JC)</b> — ใช้ส่งใบ PO ได้อย่างเดียว ไม่ต้องล็อกอิน และไม่เห็นข้อมูลใด ๆ · 1 ลิงก์ต่อสาขา · supplier เลือกตามสาขาของลิงก์ · ถ้าลิงก์หลุดให้กด “เปลี่ยนลิงก์” หรือ “ปิด”</>
+          : <>แต่ละลิงก์ใช้<b>ส่งใบ PO ได้อย่างเดียว ไม่ต้องล็อกอิน และไม่เห็นข้อมูลใด ๆ</b> — ควรสร้าง 1 ลิงก์ต่อร้าน/แฟรนไชส์ (ชื่อลิงก์จะแสดงในรายงาน) · ถ้าลิงก์หลุดให้กด “เปลี่ยนลิงก์” หรือ “ปิด”</>}</div>
         {(() => {
-          const shown = p.links.filter(l => !lq || l.name.toLowerCase().includes(lq.toLowerCase()));
+          const shown = p.links.filter(l => (tab === 'master') === isMaster(l)).filter(l => !lq || l.name.toLowerCase().includes(lq.toLowerCase()));
           const target = lsel.size ? shown.filter(l => lsel.has(l.id)) : shown; // nothing ticked = all shown
           const allOn = shown.length > 0 && shown.every(l => lsel.has(l.id));
           const copyAll = () => copyText(['รหัสสาขา\tชื่อ\tลิงก์ส่งใบ PO', ...target.map(l => `${l.branchCode || ''}\t${l.name}\t${linkUrl(l)}`)].join('\n'));
@@ -97,7 +100,7 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
                 <span className="small muted th">{lsel.size ? <>เลือก <b>{lsel.size}</b> · <a href="#" onClick={e => { e.preventDefault(); setLsel(new Set()); }}>ล้าง</a></> : `ทั้งหมดที่แสดง (${shown.length})`}:</span>
                 <button className="btn sm" disabled={!target.length} onClick={copyAll} title="คัดลอกเป็นตาราง (วางใน Excel / LINE / อีเมลได้)">คัดลอก {target.length} ลิงก์</button>
                 <button className="btn sm" disabled={!target.length} onClick={() => downloadPost('/api/drop-links/export', { ids: target.map(l => l.id) }, 'franchise-links.xlsx')}>Excel</button>
-                <button className="btn gold" onClick={() => setEditLink('new')}>+ สร้างลิงก์แฟรนไชส์</button>
+                <button className="btn gold" onClick={() => setEditLink('new')}>{tab === 'master' ? '+ สร้างลิงก์มาสเตอร์' : '+ สร้างลิงก์แฟรนไชส์'}</button>
               </div>
             </div>
             <div className="card" style={{ padding: 0 }}><div className="tblwrap"><table>
@@ -123,24 +126,28 @@ export function DropsAdmin(p: { initialTab?: string; isMain: boolean; appUrl: st
         })()}
       </>}
 
-      {editLink && <LinkModal link={editLink === 'new' ? null : editLink} appUrl={p.appUrl} onClose={() => setEditLink(null)} onSaved={url => { setEditLink(null); router.refresh(); if (url) copyText(url); }} />}
+      {editLink && <LinkModal master={tab === 'master'} branches={p.branches.filter(b => (tab === 'master' ? /^JC/ : /^JF/).test(b.code) && !p.links.some(l => l.branchCode === b.code))} link={editLink === 'new' ? null : editLink} appUrl={p.appUrl} onClose={() => setEditLink(null)} onSaved={url => { setEditLink(null); router.refresh(); if (url) copyText(url); }} />}
       {node}
     </>
   );
 }
 
-function LinkModal({ link, appUrl, onClose, onSaved }: { link: Link | null; appUrl: string; onClose: () => void; onSaved: (url?: string) => void }) {
-  const [name, setName] = useState(link?.name || ''), [active, setActive] = useState(link?.active ?? true);
+function LinkModal({ link, appUrl, master, branches, onClose, onSaved }: { link: Link | null; appUrl: string; master: boolean; branches: { code: string; name: string }[]; onClose: () => void; onSaved: (url?: string) => void }) {
+  const [name, setName] = useState(link?.name || ''), [active, setActive] = useState(link?.active ?? true), [bc, setBc] = useState('');
   return (
-    <Modal title={link ? 'แก้ไขลิงก์แฟรนไชส์' : 'สร้างลิงก์แฟรนไชส์'} onClose={onClose} width={460}>
-      <div className="field"><label>ชื่อร้าน / แฟรนไชส์</label><input value={name} placeholder="เช่น แฟรนไชส์ พัทยา" onChange={e => setName(e.target.value)} /></div>
+    <Modal title={(link ? 'แก้ไข' : 'สร้าง') + (master ? 'ลิงก์มาสเตอร์' : 'ลิงก์แฟรนไชส์')} onClose={onClose} width={460}>
+      {!link && <div className="field"><label>สาขา {master ? '(JC)' : '(JF)'} — ที่ยังไม่มีลิงก์</label>
+        <select value={bc} onChange={e => { setBc(e.target.value); const b = branches.find(x => x.code === e.target.value); if (b) setName(`${b.code} ${b.name}`); }}>
+          <option value="">{master ? '— เลือกสาขา —' : 'ไม่ผูกสาขา (ใช้ supplier ค่าเริ่มต้น)'}</option>{branches.map(b => <option key={b.code} value={b.code}>{b.code} {b.name}</option>)}</select></div>}
+      <div className="field"><label>ชื่อลิงก์</label><input value={name} placeholder={master ? 'เช่น JC002 Dragon town' : 'เช่น แฟรนไชส์ พัทยา'} onChange={e => setName(e.target.value)} /></div>
       {link && <div className="field"><label style={{ display: 'flex', gap: '.5rem', alignItems: 'center', textTransform: 'none', letterSpacing: 0 }}><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} /> เปิดใช้งานลิงก์</label></div>}
       <div className="row" style={{ justifyContent: 'flex-end' }}><button className="btn ghost" onClick={onClose}>ยกเลิก</button>
         <button className="btn gold" onClick={async () => {
           if (!name.trim()) { toast('กรอกชื่อ'); return; }
+          if (!link && master && !bc) { toast('เลือกสาขา'); return; }
           try {
             if (link) { await api(`/api/drop-links/${link.id}`, { method: 'PATCH', body: { name, active } }); toast('บันทึกแล้ว'); onSaved(); }
-            else { const r = await api<{ link: Link }>('/api/drop-links', { body: { name } }); toast('สร้างลิงก์แล้ว · คัดลอกให้แล้ว'); onSaved(`${appUrl}/d/${r.link.token}`); }
+            else { const r = await api<{ link: Link }>('/api/drop-links', { body: { name, branchCode: bc || undefined } }); toast('สร้างลิงก์แล้ว · คัดลอกให้แล้ว'); onSaved(`${appUrl}/d/${r.link.token}`); }
           } catch (e) { toast((e as Error).message); }
         }}>{link ? 'บันทึก' : 'สร้างลิงก์'}</button></div>
     </Modal>
