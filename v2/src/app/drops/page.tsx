@@ -29,7 +29,7 @@ export default async function DropsPage({ searchParams }: { searchParams: Promis
           const po = parsePoJson(d.po), r = parseRoute(d.route);
           return { id: d.id, ref: d.ref, poNumber: d.poNumber, branchCode: d.branchCode, branchName: d.branchName, issuerName: d.issuerName, item: d.item, fileName: d.fileName, size: d.size, sourceName: d.sourceName,
             createdAt: d.createdAt.toISOString(), emailStatus: d.emailStatus, emailError: d.emailError, emailTo: d.emailTo, emailCc: d.emailCc, notifiedAt: d.notifiedAt?.toISOString() || null,
-            openedAt: d.openedAt?.toISOString() || null, lastOpenedAt: d.lastOpenedAt?.toISOString() || null, openCount: d.openCount,
+            openedAt: d.openedAt?.toISOString() || null, lastOpenedAt: d.lastOpenedAt?.toISOString() || null, openCount: d.openCount, ackAt: d.ackAt?.toISOString() || null, ackName: d.ackName,
             supplierName: r?.kind === 'supplier' ? r.supplierName : '', chosenBy: r?.kind === 'supplier' ? r.chosenBy || '' : '',
             pendingCode: r?.kind === 'pending' ? r.code : '', options: r?.kind === 'pending' ? r.options.map(o => ({ id: o.id, name: o.name })) : [],
             lines: po?.lines.map(l => ({ name: l.name, qty: l.qty, unit: l.unit })) || [] };

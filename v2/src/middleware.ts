@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 // Deny-by-default: every path needs a session cookie except these. The cookie is only a hint here —
 // the real session check happens server-side in requireUser()/requirePage() on every request.
-const PUBLIC = [/^\/login$/, /^\/forgot$/, /^\/reset$/, /^\/invite$/, /^\/d\/[^/]+$/, /^\/s\/[^/]+$/, /^\/api\/auth\//, /^\/api\/public\//, /^\/api\/health$/];
+const PUBLIC = [/^\/login$/, /^\/forgot$/, /^\/reset$/, /^\/invite$/, /^\/d\/[^/]+$/, /^\/a\/[^/]+$/, /^\/s\/[^/]+$/, /^\/api\/auth\//, /^\/api\/public\//, /^\/api\/health$/];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

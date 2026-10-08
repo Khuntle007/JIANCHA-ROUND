@@ -24,7 +24,7 @@ export const POST = route(async (req: Request) => {
     { header: 'รหัสสาขา', key: 'bc', width: 10 }, { header: 'สาขา (จาก PO)', key: 'bn', width: 24 }, { header: 'ประเภท', key: 'item', width: 24 },
     { header: 'Supplier', key: 'sup', width: 34 }, { header: 'ผู้ออก PO', key: 'iss', width: 22 }, { header: 'ลิงก์', key: 'src', width: 24 },
     { header: 'จำนวนรายการ', key: 'n', width: 10 }, { header: 'ยอดรวม', key: 'total', width: 12 }, { header: 'สถานะอีเมล', key: 'st', width: 20 },
-    { header: 'ส่งถึง', key: 'to', width: 40 }, { header: 'CC', key: 'cc', width: 40 }, { header: 'เปิดอีเมลครั้งแรก', key: 'open', width: 17 },
+    { header: 'ส่งถึง', key: 'to', width: 40 }, { header: 'CC', key: 'cc', width: 40 }, { header: 'เปิดอีเมลครั้งแรก', key: 'open', width: 17 }, { header: 'ยืนยันรับ', key: 'ack', width: 17 }, { header: 'ผู้ยืนยัน', key: 'ackBy', width: 20 },
     { header: 'ไฟล์', key: 'file', width: 30 },
   ];
   head(a);
@@ -38,7 +38,7 @@ export const POST = route(async (req: Request) => {
   for (const r of rows) {
     const { d, po } = r;
     a.addRow({ at: bkk(d.createdAt), ref: d.ref, po: d.poNumber, bc: d.branchCode, bn: d.branchName, item: r.item, sup: r.supplier, iss: d.issuerName, src: d.sourceName,
-      n: po?.lines.length ?? '', total: po?.total ?? '', st: STATUS_TH[d.emailStatus] || d.emailStatus, to: r.to, cc: r.cc, open: bkk(d.openedAt), file: d.fileName });
+      n: po?.lines.length ?? '', total: po?.total ?? '', st: STATUS_TH[d.emailStatus] || d.emailStatus, to: r.to, cc: r.cc, open: bkk(d.openedAt), ack: bkk(d.ackAt), ackBy: d.ackName, file: d.fileName });
     for (const l of po?.lines || []) b.addRow({ ref: d.ref, po: d.poNumber, bc: d.branchCode, bn: d.branchName, no: l.no, name: l.name, qty: l.qty, unit: l.unit, vat: l.vat, price: l.price, total: l.total, sup: r.supplier });
   }
   for (const ws of [a, b]) ws.getColumn('total').numFmt = '#,##0.00';

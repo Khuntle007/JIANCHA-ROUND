@@ -227,6 +227,10 @@ model Drop {
   openedAt      DateTime? // first time the tracking image loaded (indication only)
   lastOpenedAt  DateTime?
   openCount     Int       @default(0)
+  ackToken      String?   @unique // "Confirm order received" button in the supplier email
+  ackAt         DateTime? // recipient confirmed receipt (explicit click + confirm, not a prefetch)
+  ackName       String    @default("")
+  ackIp         String?
   ip            String?
   createdAt     DateTime  @default(now())
 

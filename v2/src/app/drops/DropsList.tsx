@@ -6,7 +6,7 @@ import { downloadPost } from '@/components/download';
 import { fmtDateTime } from '@/lib/dates';
 
 export type DropRow = { id: string; ref: string; poNumber: string; branchCode: string; branchName: string; issuerName: string; item: string; fileName: string; size: number; sourceName: string;
-  createdAt: string; emailStatus: string; emailError: string; emailTo: string; emailCc: string; openedAt: string | null; lastOpenedAt: string | null; openCount: number;
+  createdAt: string; emailStatus: string; emailError: string; emailTo: string; emailCc: string; openedAt: string | null; lastOpenedAt: string | null; openCount: number; ackAt: string | null; ackName: string;
   supplierName: string; chosenBy: string };
 
 const STATUS: Record<string, string> = { sent: 'ส่งอีเมลแล้ว', 'dry-run': 'ทดสอบ (ไม่ส่งจริง)', failed: 'ส่งไม่สำเร็จ', pending: 'รอเลือก supplier', blocked: 'ไม่ส่งต่อ (บันทึกเท่านั้น)', queued: 'กำลังส่ง', sending: 'กำลังส่ง' };
@@ -25,9 +25,14 @@ function OpenChip({ d }: { d: DropRow }) {
   return <span className="estat sent" title={`เปิดครั้งแรก ${fmtDateTime(d.openedAt)} · ล่าสุด ${d.lastOpenedAt ? fmtDateTime(d.lastOpenedAt) : '-'} · ${d.openCount} ครั้ง (เป็นการประมาณ)`}>เปิดแล้ว {fmtDateTime(d.openedAt)}</span>;
 }
 
-type SortKey = 'createdAt' | 'po' | 'branch' | 'item' | 'supplier' | 'issuer' | 'file' | 'status' | 'opened';
-type F = { from: string; to: string; po: string; branch: string; item: string; supplier: string; issuer: string; file: string; status: string; opened: string };
-const EMPTY: F = { from: '', to: '', po: '', branch: '', item: '', supplier: '', issuer: '', file: '', status: '', opened: '' };
+function AckChip({ d }: { d: DropRow }) {
+  if (d.ackAt) return <span className="estat sent" title={'ยืนยันโดยผู้รับอีเมล' + (d.ackName ? ' · ' + d.ackName : '')}>✓ ยืนยันแล้ว {fmtDateTime(d.ackAt)}{d.ackName && <span className="muted"> · {d.ackName}</span>}</span>;
+  return d.emailStatus === 'sent' ? <span className="small muted" title="ผู้รับยังไม่ได้กดปุ่ม “รับทราบคำสั่งซื้อ” ในอีเมล">ยังไม่ยืนยัน</span> : <span className="muted small">—</span>;
+}
+
+type SortKey = 'createdAt' | 'po' | 'branch' | 'item' | 'supplier' | 'issuer' | 'file' | 'status' | 'opened' | 'ack';
+type F = { from: string; to: string; po: string; branch: string; item: string; supplier: string; issuer: string; file: string; status: string; opened: string; ack: string };
+const EMPTY: F = { from: '', to: '', po: '', branch: '', item: '', supplier: '', issuer: '', file: '', status: '', opened: '', ack: '' };
 
 export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]; items: { key: string; label: string }[]; isMain: boolean; onChoose: () => void }) {
   const router = useRouter();
@@ -42,13 +47,14 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
   const rows = useMemo(() => {
     const val: Record<SortKey, (d: DropRow) => string | number> = {
       createdAt: d => d.createdAt, po: d => d.poNumber + d.ref, branch: d => d.branchCode + d.branchName, item: d => label(d.item), supplier: d => d.supplierName,
-      issuer: d => d.issuerName + d.sourceName, file: d => d.fileName, status: d => STATUS[d.emailStatus] || d.emailStatus, opened: d => d.openedAt || '',
+      issuer: d => d.issuerName + d.sourceName, file: d => d.fileName, status: d => STATUS[d.emailStatus] || d.emailStatus, opened: d => d.openedAt || '', ack: d => d.ackAt || '',
     };
     return drops.filter(d => {
       const day = bkkDay(d.createdAt);
       return (!f.from || day >= f.from) && (!f.to || day <= f.to) && has(d.poNumber + ' ' + d.ref, f.po) && has(d.branchCode + ' ' + d.branchName, f.branch)
         && (!f.item || d.item === f.item) && has(d.supplierName, f.supplier) && has(d.issuerName + ' ' + d.sourceName, f.issuer) && has(d.fileName, f.file)
-        && (!f.status || d.emailStatus === f.status) && (!f.opened || (f.opened === 'yes' ? !!d.openedAt : d.emailStatus === 'sent' && !d.openedAt));
+        && (!f.status || d.emailStatus === f.status) && (!f.opened || (f.opened === 'yes' ? !!d.openedAt : d.emailStatus === 'sent' && !d.openedAt))
+        && (!f.ack || (f.ack === 'yes' ? !!d.ackAt : d.emailStatus === 'sent' && !d.ackAt));
     }).sort((a, b) => { const x = val[sort.k](a), y = val[sort.k](b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
   }, [drops, f, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -65,7 +71,7 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
     const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
     const w = window.open('', '_blank');
     if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างใหม่'); return; }
-    const body = target.map(d => `<tr><td>${esc(fmtDateTime(d.createdAt))}</td><td><b>${esc(d.poNumber || '—')}</b><br><small>${esc(d.ref)}</small></td><td>${esc(d.branchCode)} ${esc(d.branchName)}</td><td>${esc(label(d.item))}</td><td>${esc(d.supplierName)}</td><td>${esc(d.issuerName)}<br><small>${esc(d.sourceName)}</small></td><td>${esc(STATUS[d.emailStatus] || d.emailStatus)}</td><td>${d.openedAt ? esc(fmtDateTime(d.openedAt)) : '—'}</td></tr>`).join('');
+    const body = target.map(d => `<tr><td>${esc(fmtDateTime(d.createdAt))}</td><td><b>${esc(d.poNumber || '—')}</b><br><small>${esc(d.ref)}</small></td><td>${esc(d.branchCode)} ${esc(d.branchName)}</td><td>${esc(label(d.item))}</td><td>${esc(d.supplierName)}</td><td>${esc(d.issuerName)}<br><small>${esc(d.sourceName)}</small></td><td>${esc(STATUS[d.emailStatus] || d.emailStatus)}</td><td>${d.openedAt ? esc(fmtDateTime(d.openedAt)) : '—'}</td><td>${d.ackAt ? esc(fmtDateTime(d.ackAt) + (d.ackName ? ' · ' + d.ackName : '')) : '—'}</td></tr>`).join('');
     w.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>Order Drop · ${esc(new Date().toLocaleDateString('th-TH'))}</title>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..700&family=Noto+Sans+Thai:wght@400;600&display=swap">
       <style>@page{size:A4 landscape;margin:12mm}body{font-family:'Noto Sans Thai','Archivo',sans-serif;color:#181818;font-size:10px;margin:0}
@@ -76,7 +82,7 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
       td{border-bottom:1px solid #EBE9E6;padding:5px;vertical-align:top}small{color:#525252}</style></head><body>
       <div class="bar"><img src="${location.origin}/brand/jiancha-logo-white.png" alt="JIAN CHA"><span>ORDER DROP</span></div>
       <h1>ใบสั่งที่ได้รับ</h1><p>${target.length} รายการ · พิมพ์ ${esc(fmtDateTime(new Date().toISOString()))}</p>
-      <table><thead><tr><th>วันที่</th><th>PO / Ref</th><th>สาขา</th><th>ประเภท</th><th>Supplier</th><th>ผู้ออก PO</th><th>อีเมล</th><th>เปิดอีเมล</th></tr></thead><tbody>${body}</tbody></table>
+      <table><thead><tr><th>วันที่</th><th>PO / Ref</th><th>สาขา</th><th>ประเภท</th><th>Supplier</th><th>ผู้ออก PO</th><th>อีเมล</th><th>เปิดอีเมล</th><th>ยืนยันรับ</th></tr></thead><tbody>${body}</tbody></table>
       <script>window.onload=()=>setTimeout(()=>window.print(),400)</script></body></html>`);
     w.document.close();
   };
@@ -99,7 +105,7 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
           <tr>
             <th style={{ width: 28 }}><input type="checkbox" aria-label="เลือกทั้งหมดที่แสดง" checked={allOn} onChange={e => setSel(e.target.checked ? new Set([...sel, ...rows.map(r => r.id)]) : new Set([...sel].filter(id => !rows.some(r => r.id === id))))} /></th>
             <H k="createdAt" w={120}>วันที่</H><H k="po">PO / Ref</H><H k="branch">สาขา</H><H k="item">ประเภท</H><H k="supplier">Supplier</H>
-            <H k="issuer">ผู้ออก / ลิงก์</H><H k="file">ไฟล์</H><H k="status">อีเมล</H><H k="opened">เปิดอีเมล</H><th />
+            <H k="issuer">ผู้ออก / ลิงก์</H><H k="file">ไฟล์</H><H k="status">อีเมล</H><H k="opened">เปิดอีเมล</H><H k="ack">ยืนยันรับ</H><th />
           </tr>
           <tr className="filters">
             <th />
@@ -112,6 +118,7 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
             <th><input value={f.file} onChange={set('file')} placeholder="ค้นหา" aria-label="กรองไฟล์" /></th>
             <th><select value={f.status} onChange={set('status')} aria-label="กรองสถานะอีเมล"><option value="">ทั้งหมด</option>{Object.entries(STATUS).filter(([k]) => k !== 'sending').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></th>
             <th><select value={f.opened} onChange={set('opened')} aria-label="กรองการเปิดอีเมล"><option value="">ทั้งหมด</option><option value="yes">เปิดแล้ว</option><option value="no">ยังไม่พบการเปิด</option></select></th>
+            <th><select value={f.ack} onChange={set('ack')} aria-label="กรองการยืนยันรับ"><option value="">ทั้งหมด</option><option value="yes">ยืนยันแล้ว</option><option value="no">ยังไม่ยืนยัน</option></select></th>
             <th />
           </tr>
         </thead>
@@ -127,15 +134,16 @@ export function DropsList({ drops, items, isMain, onChoose }: { drops: DropRow[]
             <td className="small"><a href={`/api/drops/${d.id}/file`} target="_blank" rel="noopener">{d.fileName}</a><div className="muted">{fmtSize(d.size)}</div></td>
             <td><EmailChip d={d} /></td>
             <td><OpenChip d={d} /></td>
+            <td><AckChip d={d} /></td>
             <td style={{ whiteSpace: 'nowrap' }}>
               {d.emailStatus === 'blocked' ? null : d.emailStatus === 'pending' ? <button className="btn sm gold" onClick={onChoose}>เลือก supplier</button>
                 : <button className="btn sm ghost" onClick={async () => { try { const r = await api<{ emailStatus: string; emailError: string }>(`/api/drops/${d.id}/resend`, { method: 'POST' }); toast(r.emailStatus === 'failed' ? 'ส่งไม่สำเร็จ: ' + r.emailError : 'ส่งอีเมลแล้ว'); router.refresh(); } catch (e) { toast((e as Error).message); } }}>ส่งซ้ำ</button>}
               {isMain && <> <button className="btn sm ghost" onClick={() => ask('ลบใบสั่งนี้และไฟล์ PDF ถาวร?', async () => { await api(`/api/drops/${d.id}`, { method: 'DELETE' }); toast('ลบแล้ว'); router.refresh(); }, { danger: true, yes: 'ลบ' })}>ลบ</button></>}
             </td>
           </tr>
-        )) : <tr><td colSpan={11}><div className="empty th">ไม่พบรายการ</div></td></tr>}</tbody>
+        )) : <tr><td colSpan={12}><div className="empty th">ไม่พบรายการ</div></td></tr>}</tbody>
       </table></div></div>
-      <div className="small muted th" style={{ marginTop: '.5rem' }}>“เปิดอีเมล” ตรวจจากรูปภาพขนาดเล็กในอีเมล — เป็นการประมาณ: บางระบบบล็อกรูป (เปิดแล้วแต่ไม่พบ) หรือโหลดล่วงหน้า (แสดงว่าเปิดทั้งที่ยังไม่ได้อ่าน)</div>
+      <div className="small muted th" style={{ marginTop: '.5rem' }}>“เปิดอีเมล” ตรวจจากรูปภาพขนาดเล็กในอีเมล — เป็นการประมาณ: บางระบบบล็อกรูป (เปิดแล้วแต่ไม่พบ) หรือโหลดล่วงหน้า (แสดงว่าเปิดทั้งที่ยังไม่ได้อ่าน) · “ยืนยันรับ” = ผู้รับกดปุ่ม “รับทราบคำสั่งซื้อ” ในอีเมลแล้วกดยืนยัน (ข้อมูลที่เชื่อถือได้กว่า)</div>
       {node}
     </>
   );

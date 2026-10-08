@@ -99,7 +99,7 @@ export async function createDropsFromPo(opts: { po: PoData; buf: Buffer; fileNam
     const d = await prisma.drop.create({ data: {
       ref: `OD-${ymd}-${String(await nextSeq()).padStart(4, '0')}`, linkId: opts.link.id, sourceName: opts.link.name, branchCode: opts.link.branchCode || '',
       branchName: po.buyer || '-', issuerName: po.issuedBy || opts.link.name, item: g.item, fileName: opts.fileName, size: buf.length, sha256: hash,
-      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: blocked ? 'blocked' : pending ? 'pending' : 'queued', ip: opts.ip, openToken: blocked ? null : randomToken(16),
+      po: JSON.stringify(gpo), poNumber: po.number, route: g.route ? JSON.stringify(g.route) : null, emailStatus: blocked ? 'blocked' : pending ? 'pending' : 'queued', ip: opts.ip, openToken: blocked ? null : randomToken(16), ackToken: blocked ? null : randomToken(18),
     } });
     fs.writeFileSync(dropFile(d.id), buf, { mode: 0o600 });
     out.push({ id: d.id, ref: d.ref, item: g.item, pending, blocked });
@@ -150,7 +150,11 @@ function buildMail(d: DropRow, item: ItemTypeRow) {
     head = row('Ref', escHtml(d.ref)) + row('Item', itemTxt) + row('Branch', escHtml(d.branchName) + (d.branchCode ? ' (' + escHtml(d.branchCode) + ')' : ''))
       + row('Issued by', escHtml(d.issuerName)) + row('Submitted', escHtml(when) + ' (BKK)') + row('File', escHtml(d.fileName));
   }
-  const html = shell(`<p style="margin:0 0 12px;font-size:14px">มีใบสั่งซื้อใหม่จากสาขาแฟรนไชส์ / New franchise order received.</p>
+  // bulletproof-ish button (table cell) so Outlook renders it; the link opens a page with a confirm step — scanners that prefetch links can't confirm
+  const ack = d.ackToken ? `<table role="presentation" style="border-collapse:collapse;margin:0 0 16px"><tr><td style="background:#181818;border-bottom:2px solid #AD9C82">
+   <a href="${env.appUrl}/a/${d.ackToken}" style="display:inline-block;padding:12px 22px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:bold;letter-spacing:.04em">✓ รับทราบคำสั่งซื้อ / Confirm order received</a></td></tr></table>
+   <p style="margin:-8px 0 16px;font-size:12px;color:#525252">กรุณากดปุ่มเพื่อยืนยันว่าได้รับคำสั่งซื้อนี้แล้ว / Please click to confirm you have received this order.</p>` : '';
+  const html = shell(`<p style="margin:0 0 12px;font-size:14px">มีใบสั่งซื้อใหม่จากสาขาแฟรนไชส์ / New franchise order received.</p>${ack}
    <table style="border-collapse:collapse">${head}</table>${body}
    ${big ? `<p style="margin:16px 0 0"><a href="${signedFileUrl(d.id)}" style="background:#181818;color:#fff;padding:10px 16px;text-decoration:none;font-size:13px;letter-spacing:.06em">DOWNLOAD PDF</a><br><span style="font-size:11px;color:#525252">ไฟล์ใหญ่เกินแนบอีเมล — ลิงก์ใช้ได้ 14 วัน / File too large to attach — link valid 14 days.</span></p>` : `<p style="font-size:12px;color:#525252;margin:14px 0 0">ไฟล์ PDF แนบมากับอีเมลนี้ / PDF attached.</p>`}
    ${d.openToken ? `<img src="${env.appUrl}/api/public/open/${d.openToken}" width="1" height="1" alt="" style="display:block;border:0;width:1px;height:1px">` : ''}`);
@@ -168,7 +172,8 @@ export async function deliverDrop(id: string) {
     const rec = route?.kind === 'supplier' ? route : item; // supplier from product code wins over item-type recipients
     if (!rec.to.length) throw new Error('no recipient configured for ' + (route?.kind === 'supplier' ? route.supplierName : 'item ' + d.item));
     const cc = mergeCc(rec.to, rec.cc, item.skipGlobalCc ? [] : (await dropSettings()).alwaysCc);
-    if (!d.openToken) await prisma.drop.update({ where: { id }, data: { openToken: randomToken(16) } }).then(x => { d.openToken = x.openToken; });
+    if (!d.openToken || !d.ackToken) await prisma.drop.update({ where: { id }, data: { openToken: d.openToken || randomToken(16), ackToken: d.ackToken || randomToken(18) } })
+      .then(x => { d.openToken = x.openToken; d.ackToken = x.ackToken; });
     const { subject, html, big } = buildMail(d, item);
     const r = await sendMail({ to: rec.to, cc, subject, html, attachments: big ? [] : [{ name: d.fileName, contentType: 'application/pdf', content: fs.readFileSync(dropFile(d.id)) }] });
     await prisma.drop.update({ where: { id }, data: { emailStatus: r.dryRun ? 'dry-run' : 'sent', emailTo: JSON.stringify(rec.to), emailCc: JSON.stringify(cc), emailSentAt: new Date(), emailError: '' } });
