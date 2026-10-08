@@ -6,6 +6,7 @@ import { passwordProblem } from '@/lib/auth-rules';
 import { emailOk, ITEM_GROUPS, OTHER_KEY } from '@/lib/drop-catalog';
 import { parsePo, codeOf } from '@/lib/po';
 import { itemForLine, pickSuppliers, mergeCc } from '@/lib/drop';
+import { checkPoBranch, branchCheckMessage } from '@/lib/po-branch';
 import fs from 'fs';
 import path from 'path';
 
@@ -98,4 +99,31 @@ describe('branch-specific suppliers + CC', () => {
     expect(mergeCc(['a@x.co'], ['b@x.co'], ['B@x.co', 'c@x.co', 'A@x.co'])).toEqual(['b@x.co', 'c@x.co']);
   });
   it('fruits: FRUIT ORDER tag and no global CC', () => { const fr = ITEM_GROUPS.find(g => g.key === 'fruits')!; expect(fr.subjectTag).toBe('FRUIT ORDER'); expect(fr.skipGlobalCc).toBe(true); });
+});
+
+describe('PO store must match the upload link store', () => {
+  const B = [
+    { code: 'JF001', nameEn: 'Fashion Island', nameTh: 'Fashion ชั้น2' }, { code: 'JF056', nameEn: 'Robinson Suvarnabhumi', nameTh: 'Robinson Ladkrabang ชั้น1' },
+    { code: 'JF065', nameEn: 'PTT Saimai 56', nameTh: '' }, { code: 'JC009', nameEn: 'Emsphere ชั้น1', nameTh: '' },
+    { code: 'JC010', nameEn: 'Central world Groove', nameTh: '' }, { code: 'JC013', nameEn: 'Siam Square', nameTh: '' },
+  ];
+  const rec = ['JC030>JC009', 'JC009>JC013'];
+  it('code on the PO wins', () => {
+    expect(checkPoBranch('JC009 Emsphere', 'JC009', B, rec)).toEqual({ ok: true, code: 'JC009' });
+    expect(checkPoBranch('JF001 Fashion Island', 'JC009', B, rec)).toMatchObject({ ok: false, reason: 'mismatch', poCode: 'JF001' });
+  });
+  it('name-only POs are matched by store name (floor ignored)', () => {
+    expect(checkPoBranch('Ptt saimai 56', 'JF065', B).ok).toBe(true);
+    expect(checkPoBranch('Fashion ชั้น2', 'JF001', B).ok).toBe(true);
+    expect(checkPoBranch('Robinson Ladkrabang', 'JF065', B)).toMatchObject({ ok: false, reason: 'mismatch', poCode: 'JF056' });
+  });
+  it('a previous code is accepted only when the name agrees', () => {
+    expect(checkPoBranch('JC030 Emsphere', 'JC009', B, rec).ok).toBe(true);
+    expect(checkPoBranch('JC009 Siam Square', 'JC009', B, rec).ok).toBe(true); // current code wins over the reused old one
+  });
+  it('unknown store is refused', () => {
+    expect(checkPoBranch('XYZ shop', 'JF001', B)).toMatchObject({ ok: false, reason: 'unknown' });
+    expect(checkPoBranch('', 'JF001', B)).toMatchObject({ ok: false, reason: 'unknown' });
+    expect(branchCheckMessage({ ok: false, reason: 'mismatch', poCode: 'JF001', poBranch: 'JF001 Fashion Island' }, 'JC002 Dragon town')).toMatch(/^ขออภัย/);
+  });
 });

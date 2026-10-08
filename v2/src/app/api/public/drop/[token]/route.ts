@@ -5,6 +5,8 @@ import { hit } from '@/lib/ratelimit';
 import { pdfText, parsePo, PoError } from '@/lib/po';
 import { createDropsFromPo, deliverDrop, notifyScm, itemTypes } from '@/lib/drop';
 import { BLOCKED_MESSAGE } from '@/lib/drop-catalog';
+import { checkPoBranch, branchCheckMessage } from '@/lib/po-branch';
+import { audit } from '@/lib/audit';
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -37,6 +39,19 @@ export const POST = route(async (req: Request, { params }: Ctx) => {
   try { po = parsePo(await pdfText(buf)); }
   catch (e) { throw e instanceof PoError && e.code === 'NOTOOL' ? new ApiError(503, 'ระบบอ่าน PDF ยังไม่พร้อม แจ้งทีม SCM') : new ApiError(422, 'อ่านไฟล์ PDF ไม่ได้'); }
   if (!po.number || !po.lines.length) throw new ApiError(422, 'ไม่พบข้อมูล PO ในไฟล์นี้ — ต้องเป็นใบ PO (PURCHASE ORDER) จากระบบ PO เท่านั้น');
+  // the PO must be for the link's own store — a wrong-store PO is refused, never stored as an order or forwarded
+  if (l.branchCode) {
+    const [branches, rec] = await Promise.all([
+      prisma.branch.findMany({ select: { code: true, nameEn: true, nameTh: true } }),
+      prisma.setting.findUnique({ where: { key: 'recodes' } }),
+    ]);
+    const chk = checkPoBranch(po.buyer, l.branchCode, branches, rec ? JSON.parse(rec.value) : []);
+    if (!chk.ok) {
+      const own = branches.find(b => b.code === l.branchCode);
+      await audit('drop.branch_mismatch', { target: l.branchCode, meta: { link: l.name, poNumber: po.number, buyer: po.buyer, reason: chk.reason, ...(chk.reason === 'mismatch' ? { poCode: chk.poCode } : {}), fileName, ip } });
+      throw new ApiError(422, branchCheckMessage(chk, own ? `${own.code} ${own.nameEn || own.nameTh}` : l.name));
+    }
+  }
   const drops = await createDropsFromPo({ po, buf, fileName, link: l, ip });
   await prisma.dropLink.update({ where: { id: l.id }, data: { lastUsedAt: new Date() } });
   drops.filter(d => !d.pending && !d.blocked).forEach(d => void deliverDrop(d.id)); // async — the franchise gets the refs immediately

@@ -29,7 +29,7 @@ export function Portal({ token }: { token: string }) {
             if (!file) { setMsg('กรุณาแนบไฟล์ PDF'); return; }
             setBusy(true); setMsg('');
             try { setDone(await api<Done>(`/api/public/drop/${token}?filename=${encodeURIComponent(file.name)}`, { raw: file, headers: { 'Content-Type': 'application/pdf' } })); setFile(null); }
-            catch (x) { const m = (x as Error).message; setMsg(m.startsWith('การจัดส่งไม่สำเร็จ') ? m : 'ส่งไม่สำเร็จ: ' + m); setFile(null); }
+            catch (x) { const m = (x as Error).message; setMsg(/^(การจัดส่งไม่สำเร็จ|ขออภัย)/.test(m) ? m : 'ส่งไม่สำเร็จ: ' + m); setFile(null); }
             setBusy(false);
           }}>
             <p className="th small" style={{ marginTop: 0 }}>แนบไฟล์ <b>ใบ PO (PURCHASE ORDER) จากระบบ PO</b> — ระบบจะอ่านสาขา รายการสินค้า และผู้ออกใบสั่งจากไฟล์ แล้วส่งต่อให้ supplier อัตโนมัติ</p>
