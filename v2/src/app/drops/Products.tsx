@@ -33,7 +33,7 @@ export function Products({ settings, bc: bc0, branches }: { settings: { scmEmail
       {view === 'products' && <>
         <div className="grid2" style={{ gap: '.8rem', marginBottom: '.8rem' }}>
           <div className="card"><div className="kicker" style={{ marginBottom: '.4rem' }}>อีเมลกลาง</div>
-            <div className="field"><label>CC ทุกอีเมลที่ส่งถึง supplier (ยกเว้นประเภทที่ติ๊ก “ไม่ใส่ CC กลาง”)</label><input value={alwaysCc} onChange={e => setAlwaysCc(e.target.value)} placeholder="Malichat.no@jianchatea.com, scm.admin@jianchatea.com" /></div>
+            <div className="field"><label>CC ทุกอีเมลที่ส่งถึง supplier (ยกเว้นประเภทที่ติ๊ก “ไม่ใส่ CC กลาง”)</label><input value={alwaysCc} onChange={e => setAlwaysCc(e.target.value)} placeholder="Malichat.no@jianchatea.com, admin.scm@jianchatea.com" /></div>
             <div className="kicker" style={{ margin: '.6rem 0 .4rem' }}>แจ้งเตือน SCM (สินค้าที่มีหลาย supplier)</div>
             <div className="field"><label>อีเมล SCM</label><input value={scm} placeholder="scm@jianchatea.com" onChange={e => setScm(e.target.value)} /></div>
             <div className="row"><div className="field" style={{ margin: 0 }}><label>เตือนซ้ำทุก (ชม., 0 = ไม่เตือน)</label><input type="number" min={0} max={720} value={hours} onChange={e => setHours(+e.target.value)} style={{ width: 100 }} /></div>

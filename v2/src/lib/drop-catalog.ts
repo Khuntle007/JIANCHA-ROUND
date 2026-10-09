@@ -15,7 +15,7 @@ export const ITEM_GROUPS: ItemGroupDef[] = [
   { key: 'fresh_milk', label: 'Fresh milk', labelTh: 'นมสด', codes: ['030024'], words: ['fresh milk', 'นมสด'], to: [], blocked: true },
   { key: 'ice_hot_creamer', label: 'Ice hot creamer', labelTh: 'ไอซ์ฮอต ครีมเมอร์', codes: ['030012'], words: ['ice hot', 'icehot', 'ไอซ์ฮอต'], to: ['Chakrit.ji@jianchatea.com'] },
   // fruits: by code only (+ the word "fruit") — fruit names also appear in syrups / powders
-  { key: 'fruits', label: 'Fruits', labelTh: 'ผลไม้', codes: ['010001', '010006', '010010', '010011', '010012', '010016', '010039', '010044', '010045', '010003', '010002'], words: ['fruit', 'ผลไม้'], to: ['Malichat.no@jianchatea.com', 'scm.admin@jianchatea.com'], subjectTag: 'FRUIT ORDER', skipGlobalCc: true },
+  { key: 'fruits', label: 'Fruits', labelTh: 'ผลไม้', codes: ['010001', '010006', '010010', '010011', '010012', '010016', '010039', '010044', '010045', '010003', '010002'], words: ['fruit', 'ผลไม้'], to: ['Malichat.no@jianchatea.com', 'admin.scm@jianchatea.com'], subjectTag: 'FRUIT ORDER', skipGlobalCc: true },
 ];
 export const OTHER_GROUP: ItemGroupDef = { key: OTHER_KEY, label: 'Other', labelTh: 'อื่นๆ / ไม่ระบุประเภท', codes: [], words: [], to: [] };
 /** pre-2026-10-07 keys → current group */
